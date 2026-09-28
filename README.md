@@ -42,11 +42,11 @@ Configure GitHub environment `qa` with these variables:
 
 | Variable | Value |
 | --- | --- |
-| `DEV_FACTORY_RESOURCE_ID` | Full Azure resource ID of `dev-cgpc-poc` (needed by the ADF export utility) |
+| `DEV_FACTORY_RESOURCE_ID` | `/subscriptions/b2ab32d1-8c22-4a4e-acdd-94746d481eb1/resourceGroups/PoCCGPC/providers/Microsoft.DataFactory/factories/dev-cgpc-poc` |
 | `QA_ADF_RESOURCE_GROUP` | `PoCCGPC` |
 | `QA_ADF_FACTORY_NAME` | `qa-cgpc-poc` |
 | `QA_ADLS_ACCOUNT_NAME` | `qacgpcpocadls` |
-| `QA_ADLS_FILE_SYSTEM` | QA filesystem/container name (still to confirm) |
+| `QA_ADLS_FILE_SYSTEM` | `sales` |
 
 Add environment secrets `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and `AZURE_SUBSCRIPTION_ID`. The QA resources are in subscription `b2ab32d1-8c22-4a4e-acdd-94746d481eb1`. Configure Azure OIDC federation for this repository's `qa` GitHub environment, and protect the `qa` environment and QA branch before merging `Dev` into `QA`. The Azure deployment identity also needs QA ADLS read access for the final file check.
 
