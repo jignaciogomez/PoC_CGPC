@@ -1,0 +1,19 @@
+{
+  "name": "DS_RandomUserLanding",
+  "properties": {
+    "linkedServiceName": {
+      "referenceName": "LS_AdlsGen2",
+      "type": "LinkedServiceReference"
+    },
+    "annotations": [],
+    "type": "Binary",
+    "typeProperties": {
+      "location": {
+        "type": "AzureBlobFSLocation",
+        "fileName": "users.json",
+        "folderPath": "landing",
+        "fileSystem": "sales"
+      }
+    }
+  }
+}

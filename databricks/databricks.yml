@@ -17,6 +17,9 @@ targets:
   dev:
     default: true
     mode: development
+    variables:
+      storage_account: devcgpcpocadls
+      file_system: sales
 
 resources:
   jobs:

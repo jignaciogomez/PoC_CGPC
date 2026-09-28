@@ -1,10 +1,10 @@
 {
   "name": "PL_LoadRandomUsers",
   "properties": {
-    "description": "DEV: copy the full Random User API JSON response to ADLS Gen2. The results array contains the requested user rows.",
+    "description": "Copy the full Random User API JSON response to ADLS Gen2. The results array contains the requested user rows.",
     "activities": [
       {
-        "name": "CopyRandomUserApiToDevAdls",
+        "name": "CopyRandomUserApiToAdls",
         "type": "Copy",
         "dependsOn": [],
         "policy": {
@@ -39,14 +39,12 @@
         ],
         "outputs": [
           {
-            "referenceName": "DS_DevRandomUserLanding",
+            "referenceName": "DS_RandomUserLanding",
             "type": "DatasetReference"
           }
         ]
       }
     ],
-    "annotations": [
-      "dev"
-    ]
+    "annotations": []
   }
 }

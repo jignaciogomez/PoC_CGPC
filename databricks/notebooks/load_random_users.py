@@ -6,7 +6,7 @@ from pyspark.sql.functions import col, current_timestamp, explode, to_json
 
 CATALOG = "dev_bronze_ca"
 SCHEMA = "sales"
-LANDING_FILE = "landing/randomuser/users.json"
+LANDING_FILE = "landing/users.json"
 SECRET_SCOPE = "dev-adls"
 
 dbutils.widgets.text("storage_account", "")
