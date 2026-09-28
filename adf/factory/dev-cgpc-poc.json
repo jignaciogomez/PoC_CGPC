@@ -1,0 +1,15 @@
+{
+	"name": "dev-cgpc-poc",
+	"properties": {
+		"trustModeClaimForMi": {
+			"value": "Disabled",
+			"editable": true
+		}
+	},
+	"location": "eastus",
+	"identity": {
+		"type": "SystemAssigned",
+		"principalId": "c3140a32-ca9e-433d-a956-7014a8892d6d",
+		"tenantId": "162d1baa-3716-4a8b-a250-315c0d3a24c2"
+	}
+}
