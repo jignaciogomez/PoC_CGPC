@@ -1,9 +1,9 @@
-name: Validate Dev example
+name: Validate ADF and Databricks source
 
 on:
   pull_request:
   push:
-    branches: [Dev]
+    branches: [Dev, QA]
 
 permissions:
   contents: read
@@ -16,11 +16,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Check ADF source and Dev catalog convention
-        run: python scripts/check_example.py
+      - name: Check ADF source and catalog convention
+        run: |
+          python scripts/check_example.py
+          python scripts/test_qa_adf_template.py
       - name: Compile notebook Python
         run: python -m py_compile databricks/notebooks/load_random_users.py
       - name: Parse bundle YAML
         run: |
           python -m pip install PyYAML
-          python -c "import yaml; yaml.safe_load(open('databricks/databricks.yml'))"
+          python -c "import yaml; [yaml.safe_load(open(p)) for p in ['databricks/databricks.yml', '.github/workflows/validate.yml', '.github/workflows/promote-qa.yml']]"

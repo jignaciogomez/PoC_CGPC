@@ -1,6 +1,6 @@
 # PoC_CGPC: Dev API landing in ADLS
 
-`dev-cgpc-poc` is connected to this repository on collaboration branch `Dev`, publish branch `adf_publish`, and ADF root `/adf`. The current implementation is **Dev only**.
+`dev-cgpc-poc` is connected to this repository on collaboration branch `Dev`, publish branch `adf_publish`, and ADF root `/adf`. Dev is the Git authoring environment. The QA workflow deploys reviewed source after the QA resources and GitHub environment are configured.
 
 ```text
 Random User API -> ADF Copy activity -> Dev ADLS Gen2 sales/landing/users.json
@@ -30,7 +30,27 @@ The Databricks workspace URL `https://dbc-db5836d9-ab81.cloud.databricks.com/` i
 5. Register a Microsoft Entra application for Databricks read access to the Dev ADLS filesystem. Give it **Storage Blob Data Reader** or appropriate read ACLs. Create a Databricks secret scope named `dev-adls` with keys `client-id`, `client-secret`, and `tenant-id`. Do not commit credential values.
 6. Supply `BUNDLE_VAR_cluster_id`, then run `databricks bundle validate -t dev` and `databricks bundle deploy -t dev` from `databricks/`. Start the Dev job after the ADF Copy. Its cluster must support the ABFS OAuth configuration and network access to Azure storage and Microsoft Entra ID.
 
-There is no active QA deployment in this iteration. A future QA deployment can keep the generic ADF artifact names while supplying its own ADLS account, filesystem, credentials, and Databricks catalog `qa_bronze_ca.sales`. The current connection values are Dev specific. The existing ADF `adf_publish` branch remains the Live publishing output for this Dev factory.
+## Promote ADF ingestion to QA
+
+`.github/workflows/promote-qa.yml` runs when reviewed source is pushed to `QA`. It can also be dispatched manually after the workflow exists on GitHub's default branch. The workflow validates source, exports the ADF JSON with Microsoft's utility, prepares a temporary QA ARM artifact, deploys it to the QA ADF factory, runs `PL_LoadRandomUsers`, and checks that `landing/users.json` exists in the QA ADLS filesystem. This first QA test covers **ADF ingestion only**. Databricks deployment and `qa_bronze_ca.sales` are a later step.
+
+The Dev linked service contains a factory-bound `encryptedCredential` added by ADF Studio. The QA build script removes it **only from the temporary deployment artifact**, substitutes the QA ADLS endpoint and filesystem, and uses the QA factory's system-assigned managed identity. The Git source remains unchanged. [Microsoft documents](https://learn.microsoft.com/en-us/azure/data-factory/continuous-integration-delivery-resource-manager-custom-parameters) why that encrypted credential cannot be reused in another factory.
+
+Before the first QA branch push, create the QA ADF factory and QA ADLS Gen2 account/filesystem. Enable the QA factory's system-assigned identity and grant it **Storage Blob Data Contributor** on the QA destination. The GitHub Azure deployment identity needs permission to deploy resources to the QA resource group and **Storage Blob Data Reader** on the QA ADLS filesystem for the final file check. Confirm storage firewall access for the ADF integration runtime and GitHub runner.
+
+Configure GitHub environment `qa` with these variables:
+
+| Variable | Value |
+| --- | --- |
+| `DEV_FACTORY_RESOURCE_ID` | Full Azure resource ID of `dev-cgpc-poc` (needed by the ADF export utility) |
+| `QA_ADF_RESOURCE_GROUP` | `PoCCGPC` |
+| `QA_ADF_FACTORY_NAME` | `qa-cgpc-poc` |
+| `QA_ADLS_ACCOUNT_NAME` | `qacgpcpocadls` |
+| `QA_ADLS_FILE_SYSTEM` | QA filesystem/container name (still to confirm) |
+
+Add environment secrets `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and `AZURE_SUBSCRIPTION_ID`. The QA resources are in subscription `b2ab32d1-8c22-4a4e-acdd-94746d481eb1`. Configure Azure OIDC federation for this repository's `qa` GitHub environment, and protect the `qa` environment and QA branch before merging `Dev` into `QA`. The Azure deployment identity also needs QA ADLS read access for the final file check.
+
+The `adf_publish` branch remains the Live publishing output for the Dev factory. QA deploys from the reviewed `QA` source branch.
 
 ## Local check
 
