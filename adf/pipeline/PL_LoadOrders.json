@@ -1,0 +1,41 @@
+{
+  "name": "PL_LoadOrders",
+  "properties": {
+    "description": "Runs the sample Databricks bronze orders notebook.",
+    "parameters": {
+      "process_date": {
+        "type": "String",
+        "defaultValue": "2026-01-01"
+      }
+    },
+    "activities": [
+      {
+        "name": "BuildBronzeOrders",
+        "type": "DatabricksNotebook",
+        "dependsOn": [],
+        "policy": {
+          "timeout": "0.01:00:00",
+          "retry": 1,
+          "retryIntervalInSeconds": 30,
+          "secureOutput": false,
+          "secureInput": false
+        },
+        "linkedServiceName": {
+          "referenceName": "LS_Databricks",
+          "type": "LinkedServiceReference"
+        },
+        "typeProperties": {
+          "notebookPath": "/Workspace/Users/replace-with-dev-deployer/.bundle/orders-poc/dev/files/notebooks/load_orders",
+          "baseParameters": {
+            "catalog_name": "dev_bronze_ca",
+            "process_date": {
+              "value": "@pipeline().parameters.process_date",
+              "type": "Expression"
+            }
+          }
+        }
+      }
+    ],
+    "annotations": []
+  }
+}

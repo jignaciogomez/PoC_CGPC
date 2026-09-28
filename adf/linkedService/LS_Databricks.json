@@ -1,0 +1,14 @@
+{
+  "name": "LS_Databricks",
+  "properties": {
+    "description": "DEV example. The deployment replaces the workspace and cluster values.",
+    "type": "AzureDatabricks",
+    "typeProperties": {
+      "domain": "https://replace-with-dev-workspace.azuredatabricks.net",
+      "authentication": "MSI",
+      "workspaceResourceId": "/subscriptions/replace-with-dev-subscription/resourceGroups/replace-with-dev-rg/providers/Microsoft.Databricks/workspaces/replace-with-dev-workspace",
+      "existingClusterId": "replace-with-dev-cluster-id"
+    },
+    "annotations": []
+  }
+}

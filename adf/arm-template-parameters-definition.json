@@ -1,0 +1,27 @@
+{
+  "Microsoft.DataFactory/factories/linkedServices": {
+    "AzureDatabricks": {
+      "properties": {
+        "typeProperties": {
+          "domain": "-:databricksDomain:string",
+          "workspaceResourceId": "-:databricksWorkspaceResourceId:string",
+          "existingClusterId": "-:databricksClusterId:string"
+        }
+      }
+    }
+  },
+  "Microsoft.DataFactory/factories/pipelines": {
+    "properties": {
+      "activities": [
+        {
+          "typeProperties": {
+            "notebookPath": "-:notebookPath:string",
+            "baseParameters": {
+              "catalog_name": "-:catalogName:string"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

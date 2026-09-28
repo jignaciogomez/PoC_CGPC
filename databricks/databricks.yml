@@ -1,0 +1,45 @@
+bundle:
+  name: orders-poc
+
+variables:
+  cluster_id:
+    description: Existing all-purpose cluster used by this small proof of concept
+  catalog_name:
+    description: Destination Unity Catalog
+
+workspace:
+  root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
+
+targets:
+  dev:
+    default: true
+    mode: development
+    variables:
+      catalog_name: dev_bronze_ca
+  qa:
+    mode: production
+    variables:
+      catalog_name: qa_bronze_ca
+  uat:
+    mode: production
+    variables:
+      catalog_name: uat_bronze_ca
+  prod:
+    mode: production
+    variables:
+      catalog_name: prod_bronze_ca
+
+resources:
+  jobs:
+    load_orders:
+      name: orders-poc-load-orders-${bundle.target}
+      parameters:
+        - name: catalog_name
+          default: ${var.catalog_name}
+        - name: process_date
+          default: "2026-01-01"
+      tasks:
+        - task_key: build_bronze_orders
+          existing_cluster_id: ${var.cluster_id}
+          notebook_task:
+            notebook_path: ./notebooks/load_orders.py
