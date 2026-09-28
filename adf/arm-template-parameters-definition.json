@@ -1,0 +1,18 @@
+{
+  "Microsoft.DataFactory/factories": {
+    "properties": {
+      "globalParameters": {
+        "*": {
+          "value": "="
+        }
+      }
+    }
+  },
+  "Microsoft.DataFactory/factories/globalparameters": {
+    "properties": {
+      "*": {
+        "value": "="
+      }
+    }
+  }
+}
