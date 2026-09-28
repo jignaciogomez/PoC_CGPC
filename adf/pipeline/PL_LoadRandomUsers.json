@@ -1,0 +1,224 @@
+{
+  "name": "PL_LoadRandomUsers",
+  "properties": {
+    "description": "Orchestrates a Databricks on AWS job that loads Random User API data into the configured Unity Catalog.",
+    "activities": [
+      {
+        "name": "GetDatabricksToken",
+        "type": "WebActivity",
+        "dependsOn": [],
+        "policy": {
+          "timeout": "0.00:05:00",
+          "retry": 2,
+          "retryIntervalInSeconds": 10,
+          "secureInput": false,
+          "secureOutput": true
+        },
+        "typeProperties": {
+          "method": "GET",
+          "url": {
+            "value": "@concat(pipeline().globalParameters.databricksTokenSecretUrl, '?api-version=7.5')",
+            "type": "Expression"
+          },
+          "authentication": {
+            "type": "MSI",
+            "resource": "https://vault.azure.net"
+          },
+          "httpRequestTimeout": "00:01:00"
+        }
+      },
+      {
+        "name": "StartJob",
+        "type": "WebActivity",
+        "dependsOn": [
+          {
+            "activity": "GetDatabricksToken",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ],
+        "policy": {
+          "timeout": "0.00:05:00",
+          "retry": 1,
+          "retryIntervalInSeconds": 10,
+          "secureInput": true,
+          "secureOutput": false
+        },
+        "typeProperties": {
+          "method": "POST",
+          "url": {
+            "value": "@concat(pipeline().globalParameters.databricksHost, '/api/2.2/jobs/run-now')",
+            "type": "Expression"
+          },
+          "headers": {
+            "Authorization": {
+              "value": "@concat('Bearer ', activity('GetDatabricksToken').output.value)",
+              "type": "Expression"
+            },
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "value": "@concat('{\"job_id\":', pipeline().globalParameters.databricksJobId, ',\"idempotency_token\":\"', pipeline().RunId, '\"}')",
+            "type": "Expression"
+          },
+          "httpRequestTimeout": "00:01:00"
+        }
+      },
+      {
+        "name": "WaitForJob",
+        "type": "Until",
+        "dependsOn": [
+          {
+            "activity": "StartJob",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ],
+        "typeProperties": {
+          "expression": {
+            "value": "@equals(variables('job_state'), 'TERMINATED')",
+            "type": "Expression"
+          },
+          "timeout": "0.01:00:00",
+          "activities": [
+            {
+              "name": "WaitBeforePoll",
+              "type": "Wait",
+              "dependsOn": [],
+              "typeProperties": {
+                "waitTimeInSeconds": 15
+              }
+            },
+            {
+              "name": "GetJobStatus",
+              "type": "WebActivity",
+              "dependsOn": [
+                {
+                  "activity": "WaitBeforePoll",
+                  "dependencyConditions": [
+                    "Succeeded"
+                  ]
+                }
+              ],
+              "policy": {
+                "timeout": "0.00:05:00",
+                "retry": 2,
+                "retryIntervalInSeconds": 10,
+                "secureInput": true,
+                "secureOutput": false
+              },
+              "typeProperties": {
+                "method": "GET",
+                "url": {
+                  "value": "@concat(pipeline().globalParameters.databricksHost, '/api/2.2/jobs/runs/get?run_id=', string(activity('StartJob').output.run_id))",
+                  "type": "Expression"
+                },
+                "headers": {
+                  "Authorization": {
+                    "value": "@concat('Bearer ', activity('GetDatabricksToken').output.value)",
+                    "type": "Expression"
+                  },
+                  "Content-Type": "application/json"
+                },
+                "httpRequestTimeout": "00:01:00"
+              }
+            },
+            {
+              "name": "SetJobState",
+              "type": "SetVariable",
+              "dependsOn": [
+                {
+                  "activity": "GetJobStatus",
+                  "dependencyConditions": [
+                    "Succeeded"
+                  ]
+                }
+              ],
+              "typeProperties": {
+                "variableName": "job_state",
+                "value": {
+                  "value": "@activity('GetJobStatus').output.status.state",
+                  "type": "Expression"
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "GetFinalJobStatus",
+        "type": "WebActivity",
+        "dependsOn": [
+          {
+            "activity": "WaitForJob",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ],
+        "policy": {
+          "timeout": "0.00:05:00",
+          "retry": 2,
+          "retryIntervalInSeconds": 10,
+          "secureInput": true,
+          "secureOutput": false
+        },
+        "typeProperties": {
+          "method": "GET",
+          "url": {
+            "value": "@concat(pipeline().globalParameters.databricksHost, '/api/2.2/jobs/runs/get?run_id=', string(activity('StartJob').output.run_id))",
+            "type": "Expression"
+          },
+          "headers": {
+            "Authorization": {
+              "value": "@concat('Bearer ', activity('GetDatabricksToken').output.value)",
+              "type": "Expression"
+            },
+            "Content-Type": "application/json"
+          },
+          "httpRequestTimeout": "00:01:00"
+        }
+      },
+      {
+        "name": "CheckJobResult",
+        "type": "IfCondition",
+        "dependsOn": [
+          {
+            "activity": "GetFinalJobStatus",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ],
+        "typeProperties": {
+          "expression": {
+            "value": "@equals(activity('GetFinalJobStatus').output.status.termination_details.code, 'SUCCESS')",
+            "type": "Expression"
+          },
+          "ifFalseActivities": [
+            {
+              "name": "FailOnDatabricksError",
+              "type": "Fail",
+              "typeProperties": {
+                "errorCode": "DATABRICKS_RUN_FAILED",
+                "message": {
+                  "value": "@concat('Databricks run ', string(activity('StartJob').output.run_id), ' ended with ', activity('GetFinalJobStatus').output.status.termination_details.code)",
+                  "type": "Expression"
+                }
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "variables": {
+      "job_state": {
+        "type": "String",
+        "defaultValue": "PENDING"
+      }
+    },
+    "annotations": []
+  }
+}

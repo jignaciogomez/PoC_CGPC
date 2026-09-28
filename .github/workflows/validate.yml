@@ -19,7 +19,7 @@ jobs:
       - name: Check ADF source and catalog convention
         run: python scripts/check_example.py
       - name: Compile notebook Python
-        run: python -m py_compile databricks/notebooks/load_orders.py
+        run: python -m py_compile databricks/notebooks/load_random_users.py
       - name: Parse workflow and bundle YAML
         run: |
           python -m pip install PyYAML

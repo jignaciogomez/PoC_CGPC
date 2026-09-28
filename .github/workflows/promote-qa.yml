@@ -34,17 +34,18 @@ jobs:
           python-version: '3.12'
       - name: Check source
         run: python scripts/check_example.py
-      - name: Check required environment settings
+      - name: Check required QA settings
         env:
           DEV_FACTORY_RESOURCE_ID: ${{ vars.DEV_FACTORY_RESOURCE_ID }}
           QA_ADF_RESOURCE_GROUP: ${{ vars.QA_ADF_RESOURCE_GROUP }}
           QA_ADF_FACTORY_NAME: ${{ vars.QA_ADF_FACTORY_NAME }}
-          QA_DATABRICKS_HOST: ${{ vars.QA_DATABRICKS_HOST }}
-          QA_DATABRICKS_WORKSPACE_RESOURCE_ID: ${{ vars.QA_DATABRICKS_WORKSPACE_RESOURCE_ID }}
           QA_DATABRICKS_CLUSTER_ID: ${{ vars.QA_DATABRICKS_CLUSTER_ID }}
+          QA_DATABRICKS_TOKEN_SECRET_URL: ${{ vars.QA_DATABRICKS_TOKEN_SECRET_URL }}
+          DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
+          DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
         run: |
-          for name in DEV_FACTORY_RESOURCE_ID QA_ADF_RESOURCE_GROUP QA_ADF_FACTORY_NAME QA_DATABRICKS_HOST QA_DATABRICKS_WORKSPACE_RESOURCE_ID QA_DATABRICKS_CLUSTER_ID; do
-            test -n "${!name}" || { echo "Missing GitHub environment variable: $name"; exit 1; }
+          for name in DEV_FACTORY_RESOURCE_ID QA_ADF_RESOURCE_GROUP QA_ADF_FACTORY_NAME QA_DATABRICKS_CLUSTER_ID QA_DATABRICKS_TOKEN_SECRET_URL DATABRICKS_CLIENT_ID DATABRICKS_CLIENT_SECRET; do
+            test -n "${!name}" || { echo "Missing QA environment setting: $name"; exit 1; }
           done
       - uses: azure/login@v2
         with:
@@ -59,32 +60,30 @@ jobs:
           npm install --no-audit --no-fund
           npm run build -- export ../../adf "$DEV_FACTORY_RESOURCE_ID" ../../build/adf
       - uses: databricks/setup-cli@v1.10.0
-      - name: Validate and deploy QA Databricks bundle
+      - name: Deploy QA Databricks bundle
         working-directory: databricks
         env:
-          DATABRICKS_AUTH_TYPE: azure-cli
-          DATABRICKS_HOST: ${{ vars.QA_DATABRICKS_HOST }}
+          DATABRICKS_HOST: https://dbc-db5836d9-ab81.cloud.databricks.com
+          DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
+          DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
           BUNDLE_VAR_cluster_id: ${{ vars.QA_DATABRICKS_CLUSTER_ID }}
         run: |
-          databricks bundle validate -t qa --output json > ../build/bundle-qa.json
+          databricks bundle validate -t qa
           databricks bundle deploy -t qa
-      - name: Prepare QA ADF parameters from exported template
+          databricks bundle summary -t qa --output json > ../build/bundle-qa-summary.json
+      - name: Build QA ADF parameter file
         env:
           QA_ADF_FACTORY_NAME: ${{ vars.QA_ADF_FACTORY_NAME }}
-          QA_DATABRICKS_HOST: ${{ vars.QA_DATABRICKS_HOST }}
-          QA_DATABRICKS_WORKSPACE_RESOURCE_ID: ${{ vars.QA_DATABRICKS_WORKSPACE_RESOURCE_ID }}
-          QA_DATABRICKS_CLUSTER_ID: ${{ vars.QA_DATABRICKS_CLUSTER_ID }}
+          QA_DATABRICKS_TOKEN_SECRET_URL: ${{ vars.QA_DATABRICKS_TOKEN_SECRET_URL }}
         run: |
-          NOTEBOOK_PATH=$(python -c "import json; print(json.load(open('build/bundle-qa.json'))['resources']['jobs']['load_orders']['tasks'][0]['notebook_task']['notebook_path'])")
+          JOB_ID=$(python -c "import json; print(json.load(open('build/bundle-qa-summary.json'))['resources']['jobs']['load_random_users']['id'])")
           python scripts/make_adf_parameters.py \
             --template build/adf/ARMTemplateForFactory.json \
             --output build/adf/qa.parameters.json \
             --factory-name "$QA_ADF_FACTORY_NAME" \
-            --workspace-host "$QA_DATABRICKS_HOST" \
-            --workspace-resource-id "$QA_DATABRICKS_WORKSPACE_RESOURCE_ID" \
-            --cluster-id "$QA_DATABRICKS_CLUSTER_ID" \
-            --notebook-path "$NOTEBOOK_PATH" \
-            --catalog qa_bronze_ca
+            --workspace-host https://dbc-db5836d9-ab81.cloud.databricks.com \
+            --job-id "$JOB_ID" \
+            --token-secret-url "$QA_DATABRICKS_TOKEN_SECRET_URL"
       - name: Deploy QA ADF live resources
         env:
           QA_ADF_RESOURCE_GROUP: ${{ vars.QA_ADF_RESOURCE_GROUP }}
@@ -102,10 +101,9 @@ jobs:
           RUN_ID=$(az datafactory pipeline create-run \
             --resource-group "$QA_ADF_RESOURCE_GROUP" \
             --factory-name "$QA_ADF_FACTORY_NAME" \
-            --name PL_LoadOrders \
-            --parameters process_date=2026-01-01 \
+            --name PL_LoadRandomUsers \
             --query runId --output tsv)
-          for attempt in $(seq 1 30); do
+          for attempt in $(seq 1 40); do
             STATUS=$(az datafactory pipeline-run show \
               --resource-group "$QA_ADF_RESOURCE_GROUP" \
               --factory-name "$QA_ADF_FACTORY_NAME" \
@@ -115,7 +113,7 @@ jobs:
               Succeeded) exit 0 ;;
               Failed|Cancelled) exit 1 ;;
             esac
-            sleep 20
+            sleep 30
           done
-          echo "ADF run did not finish within ten minutes"
+          echo "ADF run did not finish within 20 minutes"
           exit 1

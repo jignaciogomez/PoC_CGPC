@@ -1,27 +1,18 @@
 {
-  "Microsoft.DataFactory/factories/linkedServices": {
-    "AzureDatabricks": {
-      "properties": {
-        "typeProperties": {
-          "domain": "-:databricksDomain:string",
-          "workspaceResourceId": "-:databricksWorkspaceResourceId:string",
-          "existingClusterId": "-:databricksClusterId:string"
+  "Microsoft.DataFactory/factories": {
+    "properties": {
+      "globalParameters": {
+        "*": {
+          "value": "="
         }
       }
     }
   },
-  "Microsoft.DataFactory/factories/pipelines": {
+  "Microsoft.DataFactory/factories/globalparameters": {
     "properties": {
-      "activities": [
-        {
-          "typeProperties": {
-            "notebookPath": "-:notebookPath:string",
-            "baseParameters": {
-              "catalog_name": "-:catalogName:string"
-            }
-          }
-        }
-      ]
+      "*": {
+        "value": "="
+      }
     }
   }
 }

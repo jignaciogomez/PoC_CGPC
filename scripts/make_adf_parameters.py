@@ -1,27 +1,44 @@
 #!/usr/bin/env python3
-"""Create target ARM parameters after checking the ADF utility's actual export."""
+"""Build ADF target parameter file from the exported ARM template."""
 import argparse
 import json
 import re
 from pathlib import Path
 
 REFERENCE = re.compile(r"^\[parameters\('([^']+)'\)\]$")
+GLOBAL_NAMES = {
+    "databricksHost": "workspace_host",
+    "databricksJobId": "job_id",
+    "databricksTokenSecretUrl": "token_secret_url",
+}
 
 
-def ref_name(value, label):
+def parameter_name(value, label):
     match = REFERENCE.fullmatch(value) if isinstance(value, str) else None
     if not match:
-        raise ValueError(f"{label} was not parameterized in the ADF export: {value!r}")
+        raise ValueError(f"{label} was not exposed as an ARM parameter: {value!r}")
     return match.group(1)
 
 
-def named_resource(template, resource_type, suffix):
-    matches = [r for r in template["resources"]
-               if r["type"].lower() == resource_type.lower()
-               and (r["name"].endswith("/" + suffix) or suffix in r["name"])]
-    if len(matches) != 1:
-        raise ValueError(f"Expected one {resource_type}/{suffix}; found {len(matches)}")
-    return matches[0]
+def global_parameter_values(template):
+    found = {}
+    for resource in template["resources"]:
+        kind = resource["type"].lower()
+        properties = resource.get("properties", {})
+        if kind == "microsoft.datafactory/factories":
+            globals_block = properties.get("globalParameters", {})
+        elif kind == "microsoft.datafactory/factories/globalparameters":
+            globals_block = properties
+        else:
+            continue
+        for name in GLOBAL_NAMES:
+            if name in globals_block:
+                found.setdefault(name, set()).add(
+                    parameter_name(globals_block[name]["value"], name)
+                )
+    if set(found) != set(GLOBAL_NAMES) or any(len(names) != 1 for names in found.values()):
+        raise ValueError(f"Expected three distinct, parameterized ADF globals; found {found}")
+    return {name: next(iter(names)) for name, names in found.items()}
 
 
 parser = argparse.ArgumentParser()
@@ -29,48 +46,33 @@ parser.add_argument("--template", type=Path, required=True)
 parser.add_argument("--output", type=Path, required=True)
 parser.add_argument("--factory-name", required=True)
 parser.add_argument("--workspace-host", required=True)
-parser.add_argument("--workspace-resource-id", required=True)
-parser.add_argument("--cluster-id", required=True)
-parser.add_argument("--notebook-path", required=True)
-parser.add_argument("--catalog", required=True)
+parser.add_argument("--job-id", required=True)
+parser.add_argument("--token-secret-url", required=True)
 args = parser.parse_args()
 
-if not re.fullmatch(r"(dev|qa|uat|prod)_bronze_ca", args.catalog):
-    raise ValueError("Catalog must follow <environment>_bronze_ca")
-if not args.workspace_host.startswith("https://") or not args.notebook_path.startswith("/"):
-    raise ValueError("Workspace host must be HTTPS and notebook path must be absolute")
-if "/providers/Microsoft.Databricks/workspaces/" not in args.workspace_resource_id:
-    raise ValueError("Expected an Azure Databricks workspace resource ID")
+if not args.workspace_host.startswith("https://") or not args.workspace_host.endswith(".cloud.databricks.com"):
+    raise ValueError("Expected an HTTPS Databricks on AWS workspace host")
+if not args.job_id.isdecimal():
+    raise ValueError("Databricks job ID must be numeric")
+if not args.token_secret_url.startswith("https://") or "/secrets/" not in args.token_secret_url:
+    raise ValueError("Expected an Azure Key Vault secret URL")
 
 template = json.loads(args.template.read_text())
-ls = named_resource(template, "Microsoft.DataFactory/factories/linkedservices", "LS_Databricks")
-pl = named_resource(template, "Microsoft.DataFactory/factories/pipelines", "PL_LoadOrders")
-ls_props = ls["properties"]["typeProperties"]
-activity = next(a for a in pl["properties"]["activities"] if a["name"] == "BuildBronzeOrders")
-task_props = activity["typeProperties"]
-values = {
-    ref_name(ls_props["domain"], "Databricks workspace domain"): args.workspace_host,
-    ref_name(ls_props["workspaceResourceId"], "Databricks workspace resource ID"): args.workspace_resource_id,
-    ref_name(ls_props["existingClusterId"], "Databricks cluster"): args.cluster_id,
-    ref_name(task_props["notebookPath"], "notebook path"): args.notebook_path,
-    ref_name(task_props["baseParameters"]["catalog_name"], "catalog"): args.catalog,
-}
+exported_globals = global_parameter_values(template)
+factory_names = [key for key in template["parameters"] if key.lower() == "factoryname"]
+if len(factory_names) != 1:
+    raise ValueError("Expected one factoryName ARM parameter")
+values = {factory_names[0]: args.factory_name}
+for global_name, argument_name in GLOBAL_NAMES.items():
+    values[exported_globals[global_name]] = getattr(args, argument_name)
+if len(values) != 4 or set(values) - set(template["parameters"]):
+    raise ValueError("Exported ARM parameters do not match the target values")
 
-factory_parameters = [name for name in template["parameters"] if name.lower() == "factoryname"]
-if len(factory_parameters) != 1:
-    raise ValueError("Expected a factoryName ARM parameter")
-values[factory_parameters[0]] = args.factory_name
-if len(values) != 6:
-    raise ValueError("ADF export reused a parameter for distinct settings")
-missing = set(values) - set(template["parameters"])
-if missing:
-    raise ValueError(f"Missing ARM parameters: {sorted(missing)}")
-
-document = {
+parameters = {
     "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
     "contentVersion": "1.0.0.0",
     "parameters": {name: {"value": value} for name, value in values.items()},
 }
 args.output.parent.mkdir(parents=True, exist_ok=True)
-args.output.write_text(json.dumps(document, indent=2) + "\n")
-print(f"Wrote {args.output} for {args.catalog}")
+args.output.write_text(json.dumps(parameters, indent=2) + "\n")
+print(f"Wrote ADF parameters to {args.output}")

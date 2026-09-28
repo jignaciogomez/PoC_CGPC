@@ -1,15 +1,29 @@
 {
-	"name": "dev-cgpc-poc",
-	"properties": {
-		"trustModeClaimForMi": {
-			"value": "Disabled",
-			"editable": true
-		}
-	},
-	"location": "eastus",
-	"identity": {
-		"type": "SystemAssigned",
-		"principalId": "c3140a32-ca9e-433d-a956-7014a8892d6d",
-		"tenantId": "162d1baa-3716-4a8b-a250-315c0d3a24c2"
-	}
+  "name": "dev-cgpc-poc",
+  "properties": {
+    "trustModeClaimForMi": {
+      "value": "Disabled",
+      "editable": true
+    },
+    "globalParameters": {
+      "databricksHost": {
+        "type": "String",
+        "value": "https://dbc-db5836d9-ab81.cloud.databricks.com"
+      },
+      "databricksJobId": {
+        "type": "String",
+        "value": "0"
+      },
+      "databricksTokenSecretUrl": {
+        "type": "String",
+        "value": "https://replace-with-dev-vault.vault.azure.net/secrets/databricks-job-token"
+      }
+    }
+  },
+  "location": "eastus",
+  "identity": {
+    "type": "SystemAssigned",
+    "principalId": "c3140a32-ca9e-433d-a956-7014a8892d6d",
+    "tenantId": "162d1baa-3716-4a8b-a250-315c0d3a24c2"
+  }
 }

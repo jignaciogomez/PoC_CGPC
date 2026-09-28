@@ -1,13 +1,14 @@
 bundle:
-  name: orders-poc
+  name: random-users-poc
 
 variables:
   cluster_id:
-    description: Existing all-purpose cluster used by this small proof of concept
+    description: Existing Databricks cluster with Unity Catalog access and internet egress
   catalog_name:
-    description: Destination Unity Catalog
+    description: Catalog for this target
 
 workspace:
+  host: https://dbc-db5836d9-ab81.cloud.databricks.com
   root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
 
 targets:
@@ -20,26 +21,17 @@ targets:
     mode: production
     variables:
       catalog_name: qa_bronze_ca
-  uat:
-    mode: production
-    variables:
-      catalog_name: uat_bronze_ca
-  prod:
-    mode: production
-    variables:
-      catalog_name: prod_bronze_ca
 
 resources:
   jobs:
-    load_orders:
-      name: orders-poc-load-orders-${bundle.target}
+    load_random_users:
+      name: random-users-poc-${bundle.target}
+      max_concurrent_runs: 1
       parameters:
         - name: catalog_name
           default: ${var.catalog_name}
-        - name: process_date
-          default: "2026-01-01"
       tasks:
-        - task_key: build_bronze_orders
+        - task_key: load_random_users
           existing_cluster_id: ${var.cluster_id}
           notebook_task:
-            notebook_path: ./notebooks/load_orders.py
+            notebook_path: ./notebooks/load_random_users.py
