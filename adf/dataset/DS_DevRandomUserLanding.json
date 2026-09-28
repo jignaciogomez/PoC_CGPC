@@ -14,7 +14,7 @@
 			"location": {
 				"type": "AzureBlobFSLocation",
 				"fileName": "users.json",
-				"folderPath": "landing/randomuser",
+				"folderPath": "landing",
 				"fileSystem": "sales"
 			}
 		}
