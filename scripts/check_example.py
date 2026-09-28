@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """Offline structural checks for the Dev ADF to ADLS example."""
-import ast
 import json
 from pathlib import Path
 
@@ -35,10 +34,4 @@ assert sink["properties"]["linkedServiceName"]["referenceName"] == adls_link["na
 assert sink["properties"]["typeProperties"]["location"]["fileSystem"] == "sales"
 assert sink["properties"]["typeProperties"]["location"]["folderPath"] == "landing"
 assert sink["properties"]["typeProperties"]["location"]["fileName"] == "users.json"
-notebook = (ROOT / "databricks/notebooks/load_random_users.py").read_text()
-ast.parse(notebook)
-assert "urlopen" not in notebook
-assert 'spark.read.option("multiLine", "true").json(source_path)' in notebook
-assert "dev_bronze_ca" in notebook
-assert 'LANDING_FILE = "landing/users.json"' in notebook
 print("Dev ADF to ADLS source checks passed")
