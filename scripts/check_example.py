@@ -1,24 +1,40 @@
 #!/usr/bin/env python3
-"""Offline structural checks for the connected ADF/Databricks example."""
+"""Offline structural checks for the Dev ADF to ADLS example."""
+import ast
 import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-factory = json.loads((ROOT / "adf/factory/dev-cgpc-poc.json").read_text())
-pipeline = json.loads((ROOT / "adf/pipeline/PL_LoadRandomUsers.json").read_text())
-rules = json.loads((ROOT / "adf/arm-template-parameters-definition.json").read_text())
-activities = {activity["name"]: activity for activity in pipeline["properties"]["activities"]}
-globals_block = factory["properties"]["globalParameters"]
+
+def read_json(path):
+    return json.loads((ROOT / path).read_text())
+
+factory = read_json("adf/factory/dev-cgpc-poc.json")
+pipeline = read_json("adf/pipeline/PL_LoadRandomUsers.json")
+http_link = read_json("adf/linkedService/LS_RandomUserHttp.json")
+adls_link = read_json("adf/linkedService/LS_DevAdlsGen2.json")
+source = read_json("adf/dataset/DS_RandomUserApi.json")
+sink = read_json("adf/dataset/DS_DevRandomUserLanding.json")
+activity, = pipeline["properties"]["activities"]
 
 assert factory["name"] == "dev-cgpc-poc"
-assert globals_block["databricksHost"]["value"] == "https://dbc-db5836d9-ab81.cloud.databricks.com"
-assert set(globals_block) == {"databricksHost", "databricksJobId", "databricksTokenSecretUrl"}
 assert pipeline["name"] == "PL_LoadRandomUsers"
-assert activities["GetDatabricksToken"]["policy"]["secureOutput"] is True
-assert activities["StartJob"]["policy"]["secureInput"] is True
-assert activities["StartJob"]["type"] == "WebActivity"
-assert activities["WaitForJob"]["type"] == "Until"
-assert activities["CheckJobResult"]["type"] == "IfCondition"
-assert rules["Microsoft.DataFactory/factories"]["properties"]["globalParameters"]["*"]["value"] == "="
-assert not (ROOT / "adf/linkedService/LS_Databricks.json").exists(), "Azure-only linked service must be removed"
-print("ADF source checks passed")
+assert activity["type"] == "Copy"
+assert activity["typeProperties"]["source"]["type"] == "BinarySource"
+assert activity["typeProperties"]["source"]["storeSettings"]["type"] == "HttpReadSettings"
+assert activity["typeProperties"]["sink"]["type"] == "BinarySink"
+assert activity["typeProperties"]["sink"]["storeSettings"]["type"] == "AzureBlobFSWriteSettings"
+assert activity["inputs"][0]["referenceName"] == source["name"]
+assert activity["outputs"][0]["referenceName"] == sink["name"]
+assert http_link["properties"]["type"] == "HttpServer"
+assert http_link["properties"]["typeProperties"]["url"] == "https://randomuser.me/"
+assert source["properties"]["typeProperties"]["location"]["relativeUrl"] == "api/?results=1000&exc=login"
+assert adls_link["properties"]["type"] == "AzureBlobFS"
+assert sink["properties"]["typeProperties"]["location"]["folderPath"] == "landing/randomuser"
+assert sink["properties"]["typeProperties"]["location"]["fileName"] == "users.json"
+notebook = (ROOT / "databricks/notebooks/load_random_users.py").read_text()
+ast.parse(notebook)
+assert "urlopen" not in notebook
+assert 'spark.read.option("multiLine", "true").json(source_path)' in notebook
+assert "dev_bronze_ca" in notebook
+print("Dev ADF to ADLS source checks passed")

@@ -1,0 +1,19 @@
+{
+  "name": "DS_RandomUserApi",
+  "properties": {
+    "linkedServiceName": {
+      "referenceName": "LS_RandomUserHttp",
+      "type": "LinkedServiceReference"
+    },
+    "type": "Binary",
+    "typeProperties": {
+      "location": {
+        "type": "HttpServerLocation",
+        "relativeUrl": "api/?results=1000&exc=login"
+      }
+    },
+    "annotations": [
+      "dev"
+    ]
+  }
+}

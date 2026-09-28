@@ -1,0 +1,13 @@
+{
+  "name": "LS_DevAdlsGen2",
+  "properties": {
+    "type": "AzureBlobFS",
+    "typeProperties": {
+      "url": "https://replacewithdevaccount.dfs.core.windows.net"
+    },
+    "annotations": [
+      "dev",
+      "Replace the storage account before running"
+    ]
+  }
+}

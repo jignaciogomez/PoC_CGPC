@@ -1,40 +1,41 @@
-# PoC_CGPC: ADF and Databricks promotion
+# PoC_CGPC: Dev API landing in ADLS
 
-`dev-cgpc-poc` is Git-connected to this repository with collaboration branch `Dev`, publish branch `adf_publish`, and ADF root folder `/adf`. This example uses one ADF pipeline to start and monitor a Databricks Job. The job fetches [Random User API](https://randomuser.me/documentation) data from `https://randomuser.me/api/?results=1000&exc=login` and creates these objects:
+`dev-cgpc-poc` is connected to this repository on collaboration branch `Dev`, publish branch `adf_publish`, and ADF root `/adf`. The current implementation is **Dev only**.
 
-| Target | Raw table | Flattened table | View |
-| --- | --- | --- | --- |
-| DEV | `dev_bronze_ca.sales.random_users_raw` | `dev_bronze_ca.sales.random_users` | `dev_bronze_ca.sales.v_random_users_by_country` |
-| QA | `qa_bronze_ca.sales.random_users_raw` | `qa_bronze_ca.sales.random_users` | `qa_bronze_ca.sales.v_random_users_by_country` |
+```text
+Random User API -> ADF Copy activity -> Dev ADLS Gen2 landing/randomuser/users.json
+                                                |
+                                                v
+                             Databricks Dev job -> dev_bronze_ca.sales tables/view
+```
 
-The supplied Databricks URL, `https://dbc-db5836d9-ab81.cloud.databricks.com`, identifies a **Databricks on AWS** workspace. ADF's native Azure Databricks linked service is for Azure Databricks, so `PL_LoadRandomUsers` uses ADF Web activities and the Databricks Jobs REST API. It gets a Databricks service-principal token from Azure Key Vault through the ADF managed identity, starts the target job, polls the run, and fails the pipeline when the job fails. The notebook itself retrieves the 1,000-user API response; ADF does not pass a large JSON payload between activities.
+`PL_LoadRandomUsers` calls `https://randomuser.me/api/?results=1000&exc=login` with ADF's HTTP connector and writes the **entire JSON response** to ADLS Gen2 with a Binary Copy activity. The `results` array holds the 1,000 user rows; `info` retains the API seed and version. ADF does not reshape the JSON. Each run replaces `users.json`, so run the Databricks job after the Copy succeeds. The API response changes between runs because the URL has no fixed seed.
 
-The API omits `login` as requested. The raw table keeps each user's JSON plus the response seed/version and load time. The flattened table exposes selected fields; the view counts users by country. Each run replaces the two demonstration tables. The API response changes between runs because the requested URL has no fixed seed.
+The Dev Databricks job reads this ADLS file, extracts each `results` element, and creates:
 
-## Promotion flow
+| Object | Purpose |
+| --- | --- |
+| `dev_bronze_ca.sales.random_users_raw` | One raw JSON string per user, plus response metadata and load time |
+| `dev_bronze_ca.sales.random_users` | Selected flattened fields |
+| `dev_bronze_ca.sales.v_random_users_by_country` | User counts by country |
 
-1. Author ADF JSON in `Dev` under `/adf`. Develop the notebook in the `dev` Databricks bundle target. Publish in ADF Studio when DEV Live mode should run; that generates `adf_publish`.
-2. Review a PR from `Dev` to `QA`. A push to `QA` runs `.github/workflows/promote-qa.yml`, protected by the GitHub `qa` environment.
-3. The workflow exports an ARM template from the reviewed QA branch using the [ADF automated export utility](https://learn.microsoft.com/en-us/azure/data-factory/continuous-integration-delivery-improvements), deploys the Databricks bundle target `qa`, reads the resulting QA job ID, and deploys the ADF template with QA factory, job, and Key Vault settings.
-4. Optionally run `PL_LoadRandomUsers` as a smoke test and inspect the QA table count and view. UAT/PROD can later use the same reviewed source and their own catalogs, secrets, identities, and protected environments.
+The Databricks workspace URL `https://dbc-db5836d9-ab81.cloud.databricks.com/` identifies Databricks on AWS. Accessing Azure ADLS from this workspace needs a separate Microsoft Entra service principal and Databricks secrets. The ADF managed identity only writes the lake file. The notebook uses [Databricks' documented cross-cloud ABFS OAuth pattern](https://docs.databricks.com/aws/en/connect/storage/azure-storage), which Databricks describes as a legacy pattern that bypasses Unity Catalog governance for the *source storage*. The resulting managed tables remain in the named catalog.
 
-The `adf_publish` branch is not the QA deployment input. ADF ARM parameters change target configuration without replacing arbitrary `dev` strings in source. `scripts/make_adf_parameters.py` checks that the [custom ADF parameter definition](https://learn.microsoft.com/en-us/azure/data-factory/continuous-integration-delivery-resource-manager-custom-parameters) produced the expected parameters.
+## Configure Dev
 
-## Remaining setup
+1. In `adf/linkedService/LS_DevAdlsGen2.json`, replace `replacewithdevaccount` with the real **Dev** ADLS Gen2 storage account. In `adf/dataset/DS_DevRandomUserLanding.json`, replace `replace-with-dev-filesystem` with its existing filesystem (container). The configured output is `landing/randomuser/users.json`.
+2. Give the system-assigned identity of `dev-cgpc-poc` **Storage Blob Data Contributor** on the Dev storage account or equivalent filesystem/folder ACLs. The ADF identity object ID is visible in the factory's Azure portal Identity page. Confirm the storage firewall allows the selected ADF integration runtime. [Microsoft's ADLS Gen2 connector guide](https://learn.microsoft.com/en-us/azure/data-factory/connector-azure-data-lake-storage) covers these settings.
+3. In ADF Studio on `Dev`, inspect the HTTP and ADLS linked services, test their connections, then debug `PL_LoadRandomUsers`. Check the Copy activity succeeded and `users.json` contains one JSON object with `results` and `info`. Publish in ADF Studio when the Git changes should become Live mode resources.
+4. Run `databricks/sql/bootstrap_dev.sql` as an authorized catalog creator. Grant the Dev job identity permission to use `dev_bronze_ca.sales` and create/replace its tables and view.
+5. Register a Microsoft Entra application for Databricks read access to the Dev ADLS filesystem. Give it **Storage Blob Data Reader** or appropriate read ACLs. Create a Databricks secret scope named `dev-adls` with keys `client-id`, `client-secret`, and `tenant-id`. Do not commit credential values.
+6. Supply `BUNDLE_VAR_cluster_id`, `BUNDLE_VAR_storage_account`, and `BUNDLE_VAR_file_system`, then run `databricks bundle validate -t dev` and `databricks bundle deploy -t dev` from `databricks/`. Start the Dev job after the ADF Copy. Its cluster must support the ABFS OAuth configuration and network access to Azure storage and Microsoft Entra ID.
 
-1. Create or identify a Unity Catalog-capable Databricks cluster with HTTPS egress to `randomuser.me`. Set `BUNDLE_VAR_cluster_id` for local DEV bundle deployment and `QA_DATABRICKS_CLUSTER_ID` in the GitHub `qa` environment. The provided URL alone does not identify a cluster.
-2. Run `databricks/sql/bootstrap_dev.sql` and `databricks/sql/bootstrap_qa.sql` as an authorized catalog creator. Grant the DEV and QA job run identities access to their respective catalogs and `sales` schema. If both targets share this workspace, catalog grants must enforce environment isolation.
-3. Deploy the `dev` bundle target. Get the DEV job ID from `databricks bundle summary -t dev --output json` at `resources.jobs.load_random_users.id`; put it in `adf/factory/dev-cgpc-poc.json` as global parameter `databricksJobId`. The current value `0` is a placeholder.
-4. Create an Azure Key Vault secret containing a Databricks service-principal access token with permission to run the DEV job. Give the DEV ADF managed identity Key Vault **Get Secret** access. Set the `databricksTokenSecretUrl` global parameter to that secret's URL. Set the QA equivalent in its own vault (or isolated secret) and grant the QA factory identity access. ADF reads the token with [secure Web activity output](https://learn.microsoft.com/en-us/azure/data-factory/how-to-use-azure-key-vault-secrets-pipeline-activities); it is never stored in Git.
-5. Create a QA ADF factory if one does not yet exist. Set these GitHub `qa` environment variables: `DEV_FACTORY_RESOURCE_ID`, `QA_ADF_RESOURCE_GROUP`, `QA_ADF_FACTORY_NAME`, `QA_DATABRICKS_CLUSTER_ID`, and `QA_DATABRICKS_TOKEN_SECRET_URL`.
-6. Set GitHub `qa` environment secrets `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `DATABRICKS_CLIENT_ID`, and `DATABRICKS_CLIENT_SECRET`. Configure Azure OIDC federation for ARM deployment and a Databricks service principal with [OAuth M2M](https://docs.databricks.com/aws/en/dev-tools/cli/authentication) access for bundle deployment. The ADF runtime token in Key Vault and the CI deployment credentials are separate.
-7. Protect `QA` and the `qa` environment before merging. On the first QA branch push, the workflow will attempt deployment; configure the resources and settings above first. GitHub manual dispatch requires the workflow file on the default branch, so the QA push trigger is the initial path.
+There is no active QA deployment in this iteration. The future promotion can deploy reviewed source to a QA factory and change its ADLS account, filesystem, and Databricks catalog to `qa_bronze_ca.sales` through environment configuration. The existing ADF `adf_publish` branch remains the Live publishing output for this Dev factory.
 
-The pipeline uses the current Databricks [Jobs run-now API](https://docs.databricks.com/api/workspace/jobs/runnow) and polls [run status](https://docs.databricks.com/api/workspace/jobs/getrun). Network access from ADF to the AWS workspace and from Databricks compute to Random User must be permitted. Actual cloud deployment and runtime behavior still need validation with the target resources.
-
-## Local checks
+## Local check
 
 ```bash
 python3 scripts/check_example.py
-python3 -c "import ast; ast.parse(open('databricks/notebooks/load_random_users.py').read())"
 ```
+
+This check verifies repository structure and Python syntax. A live ADF Copy and Databricks run require the cloud resources and permissions above.

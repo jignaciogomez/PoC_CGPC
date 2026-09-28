@@ -1,0 +1,22 @@
+{
+  "name": "DS_DevRandomUserLanding",
+  "properties": {
+    "linkedServiceName": {
+      "referenceName": "LS_DevAdlsGen2",
+      "type": "LinkedServiceReference"
+    },
+    "type": "Binary",
+    "typeProperties": {
+      "location": {
+        "type": "AzureBlobFSLocation",
+        "fileSystem": "replace-with-dev-filesystem",
+        "folderPath": "landing/randomuser",
+        "fileName": "users.json"
+      }
+    },
+    "annotations": [
+      "dev",
+      "Replace the filesystem before running"
+    ]
+  }
+}

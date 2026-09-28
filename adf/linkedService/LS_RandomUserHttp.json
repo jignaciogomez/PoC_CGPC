@@ -1,0 +1,13 @@
+{
+  "name": "LS_RandomUserHttp",
+  "properties": {
+    "type": "HttpServer",
+    "typeProperties": {
+      "url": "https://randomuser.me/",
+      "authenticationType": "Anonymous"
+    },
+    "annotations": [
+      "dev"
+    ]
+  }
+}

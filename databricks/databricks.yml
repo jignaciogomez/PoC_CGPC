@@ -3,9 +3,11 @@ bundle:
 
 variables:
   cluster_id:
-    description: Existing Databricks cluster with Unity Catalog access and internet egress
-  catalog_name:
-    description: Catalog for this target
+    description: Existing Databricks cluster with Unity Catalog and Azure ABFS access
+  storage_account:
+    description: Dev ADLS Gen2 storage account name
+  file_system:
+    description: Dev ADLS Gen2 filesystem name
 
 workspace:
   host: https://dbc-db5836d9-ab81.cloud.databricks.com
@@ -15,21 +17,17 @@ targets:
   dev:
     default: true
     mode: development
-    variables:
-      catalog_name: dev_bronze_ca
-  qa:
-    mode: production
-    variables:
-      catalog_name: qa_bronze_ca
 
 resources:
   jobs:
     load_random_users:
-      name: random-users-poc-${bundle.target}
+      name: random-users-poc-dev
       max_concurrent_runs: 1
       parameters:
-        - name: catalog_name
-          default: ${var.catalog_name}
+        - name: storage_account
+          default: ${var.storage_account}
+        - name: file_system
+          default: ${var.file_system}
       tasks:
         - task_key: load_random_users
           existing_cluster_id: ${var.cluster_id}

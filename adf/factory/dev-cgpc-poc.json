@@ -5,20 +5,7 @@
       "value": "Disabled",
       "editable": true
     },
-    "globalParameters": {
-      "databricksHost": {
-        "type": "String",
-        "value": "https://dbc-db5836d9-ab81.cloud.databricks.com"
-      },
-      "databricksJobId": {
-        "type": "String",
-        "value": "0"
-      },
-      "databricksTokenSecretUrl": {
-        "type": "String",
-        "value": "https://replace-with-dev-vault.vault.azure.net/secrets/databricks-job-token"
-      }
-    }
+    "globalParameters": {}
   },
   "location": "eastus",
   "identity": {
