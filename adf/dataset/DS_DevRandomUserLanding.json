@@ -1,22 +1,22 @@
 {
-  "name": "DS_DevRandomUserLanding",
-  "properties": {
-    "linkedServiceName": {
-      "referenceName": "LS_DevAdlsGen2",
-      "type": "LinkedServiceReference"
-    },
-    "type": "Binary",
-    "typeProperties": {
-      "location": {
-        "type": "AzureBlobFSLocation",
-        "fileSystem": "replace-with-dev-filesystem",
-        "folderPath": "landing/randomuser",
-        "fileName": "users.json"
-      }
-    },
-    "annotations": [
-      "dev",
-      "Replace the filesystem before running"
-    ]
-  }
+	"name": "DS_DevRandomUserLanding",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "LS_DevAdlsGen2",
+			"type": "LinkedServiceReference"
+		},
+		"annotations": [
+			"dev",
+			"Replace the filesystem before running"
+		],
+		"type": "Binary",
+		"typeProperties": {
+			"location": {
+				"type": "AzureBlobFSLocation",
+				"fileName": "users.json",
+				"folderPath": "landing/randomuser",
+				"fileSystem": "sales"
+			}
+		}
+	}
 }
