@@ -1,5 +1,7 @@
 # ADF promotion PoC
 
+For setup, deployment files, and the full promotion process, see the [ADF promotion guide](docs/ADF_PROMOTION_GUIDE.md).
+
 The DEV factory `dev-cgpc-poc` is connected to this repository on collaboration branch `Dev` with ADF root `/adf`. Its publish branch is `adf_publish`. Only DEV uses ADF Git integration; downstream factories receive reviewed source through deployments as their workflows are added. The intended Git promotion path is feature branch → `Dev` → `QA` → `UAT` → `Prod`, with a protected branch and PR review at every merge. Configure those branch rules in GitHub; the current deployment workflow implements the `QA` step.
 
 The example pipeline `PL_LoadRandomUsers` copies the complete JSON response from `https://randomuser.me/api/?results=1000&exc=login` to `sales/landing/users.json`. It does not flatten the `results` array. Its pipeline, dataset, and linked service names remain the same in every factory.
