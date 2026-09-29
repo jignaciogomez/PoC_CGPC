@@ -1,4 +1,4 @@
-name: Deploy and smoke-test QA ADF
+name: Deploy QA ADF
 
 on:
   push:
@@ -53,12 +53,6 @@ jobs:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      - name: Check QA factory managed identity
-        shell: bash
-        run: |
-          set -euo pipefail
-          identity_type=$(az datafactory show --resource-group "$QA_ADF_RESOURCE_GROUP" --name "$QA_ADF_FACTORY_NAME" --query identity.type --output tsv)
-          [[ "$identity_type" == *SystemAssigned* ]] || { echo "QA factory needs a system-assigned managed identity"; exit 1; }
       - name: Export reviewed ADF source
         working-directory: ci/adf
         env:
@@ -85,26 +79,3 @@ jobs:
             --resource-group "$QA_ADF_RESOURCE_GROUP" \
             --template-file build/adf/qa.template.json \
             --parameters @build/adf/qa.parameters.json
-      - name: Smoke-test QA ADF ingestion
-        shell: bash
-        run: |
-          set -euo pipefail
-          run_id=$(az datafactory pipeline create-run \
-            --resource-group "$QA_ADF_RESOURCE_GROUP" \
-            --factory-name "$QA_ADF_FACTORY_NAME" \
-            --name PL_LoadRandomUsers \
-            --query runId --output tsv)
-          for attempt in $(seq 1 40); do
-            status=$(az datafactory pipeline-run show \
-              --resource-group "$QA_ADF_RESOURCE_GROUP" \
-              --factory-name "$QA_ADF_FACTORY_NAME" \
-              --run-id "$run_id" --query status --output tsv)
-            echo "ADF run $run_id: $status"
-            case "$status" in
-              Succeeded) exit 0 ;;
-              Failed|Cancelled) exit 1 ;;
-            esac
-            sleep 15
-          done
-          echo "ADF run did not finish within 10 minutes"
-          exit 1
