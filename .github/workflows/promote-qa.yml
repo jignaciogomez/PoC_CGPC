@@ -53,13 +53,12 @@ jobs:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      - name: Read QA factory location
+      - name: Check QA factory managed identity
         shell: bash
         run: |
           set -euo pipefail
-          location=$(az datafactory show --resource-group "$QA_ADF_RESOURCE_GROUP" --name "$QA_ADF_FACTORY_NAME" --query location --output tsv)
-          test -n "$location"
-          echo "QA_FACTORY_LOCATION=$location" >> "$GITHUB_ENV"
+          identity_type=$(az datafactory show --resource-group "$QA_ADF_RESOURCE_GROUP" --name "$QA_ADF_FACTORY_NAME" --query identity.type --output tsv)
+          [[ "$identity_type" == *SystemAssigned* ]] || { echo "QA factory needs a system-assigned managed identity"; exit 1; }
       - name: Export reviewed ADF source
         working-directory: ci/adf
         env:
@@ -74,7 +73,6 @@ jobs:
             --output-template build/adf/qa.template.json \
             --output-parameters build/adf/qa.parameters.json \
             --factory-name "$QA_ADF_FACTORY_NAME" \
-            --location "$QA_FACTORY_LOCATION" \
             --storage-account "$QA_ADLS_ACCOUNT_NAME" \
             --filesystem "$QA_ADLS_FILE_SYSTEM"
       - name: Validate and deploy QA ADF

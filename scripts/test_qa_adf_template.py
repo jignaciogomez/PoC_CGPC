@@ -11,16 +11,14 @@ class QaTemplateTests(unittest.TestCase):
         self.template = {
             "parameters": {
                 "factoryName": {"type": "string", "defaultValue": "dev-cgpc-poc"},
-                "devEndpoint": {"type": "string", "defaultValue": "https://devcgpcpocadls.dfs.core.windows.net/"},
-                "devCredential": {"type": "securestring"},
+                "LS_AdlsGen2_accountKey": {"type": "secureString"},
             },
             "resources": [
-                {"type": "Microsoft.DataFactory/factories", "name": "[parameters('factoryName')]", "location": "eastus", "identity": {"type": "SystemAssigned", "principalId": "dev-id", "tenantId": "dev-tenant"}},
-                {"type": "Microsoft.DataFactory/factories/linkedservices",
+                {"type": "Microsoft.DataFactory/factories/linkedServices",
                  "name": "[concat(parameters('factoryName'), '/LS_AdlsGen2')]",
                  "properties": {"type": "AzureBlobFS", "typeProperties": {
-                     "url": "[parameters('devEndpoint')]",
-                     "encryptedCredential": "[parameters('devCredential')]"}}},
+                     "url": "https://devcgpcpocadls.dfs.core.windows.net/",
+                     "accountKey": {"type": "SecureString", "value": "[parameters('LS_AdlsGen2_accountKey')]"}}}},
                 {"type": "Microsoft.DataFactory/factories/datasets",
                  "name": "[concat(parameters('factoryName'), '/DS_RandomUserLanding')]",
                  "properties": {"typeProperties": {"location": {
@@ -32,19 +30,19 @@ class QaTemplateTests(unittest.TestCase):
         }
 
     def test_retargets_qa_and_drops_factory_bound_credential(self):
-        output, params = prepare(copy.deepcopy(self.template), "qa-cgpc-poc", "westus2", "qacgpcadls", "qasales")
-        self.assertEqual(output["resources"][0]["location"], "westus2")
-        self.assertEqual(output["resources"][0]["identity"], {"type": "SystemAssigned"})
-        link = output["resources"][1]["properties"]["typeProperties"]
-        self.assertEqual(link["url"], "https://qacgpcadls.dfs.core.windows.net/")
+        output, params = prepare(copy.deepcopy(self.template), "qa-cgpc-poc", "qacgpcpocadls", "sales")
+        link = output["resources"][0]["properties"]["typeProperties"]
+        self.assertEqual(link["url"], "https://qacgpcpocadls.dfs.core.windows.net/")
         self.assertNotIn("encryptedCredential", link)
-        self.assertEqual(output["resources"][2]["properties"]["typeProperties"]["location"]["fileSystem"], "qasales")
+        self.assertNotIn("accountKey", link)
+        self.assertEqual(output["resources"][1]["properties"]["typeProperties"]["location"]["fileSystem"], "sales")
         self.assertEqual(set(output["parameters"]), {"factoryName"})
+        self.assertEqual(output["parameters"]["factoryName"]["defaultValue"], "qa-cgpc-poc")
         self.assertEqual(params["parameters"]["factoryName"]["value"], "qa-cgpc-poc")
 
     def test_refuses_dev_account(self):
         with self.assertRaises(ValueError):
-            prepare(copy.deepcopy(self.template), "qa-cgpc-poc", "eastus", "devcgpcpocadls", "sales")
+            prepare(copy.deepcopy(self.template), "qa-cgpc-poc", "devcgpcpocadls", "sales")
 
 
 if __name__ == "__main__":
