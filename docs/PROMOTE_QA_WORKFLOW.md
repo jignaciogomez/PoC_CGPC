@@ -2,7 +2,14 @@
 
 ## Executive summary
 
-Merge a reviewed PR into `QA` → run deployment checks → authenticate GitHub Actions with Azure → validate and export ADF JSON as an ARM template → use Python to prepare the QA parameter file → validate and deploy the unchanged template to the QA Data Factory.
+```mermaid
+flowchart LR
+    QA[Merge reviewed PR into QA] --> CHECK[Run deployment checks]
+    CHECK --> LOGIN[Authenticate GitHub Actions with Azure]
+    LOGIN --> EXPORT[Validate ADF JSON and export ARM template]
+    EXPORT --> PARAMS[Python prepares QA parameter file]
+    PARAMS --> DEPLOY[Azure validates and deploys to QA ADF]
+```
 
 The [promote-qa.yml workflow](../.github/workflows/promote-qa.yml) deploys reviewed ADF definitions when a PR is merged into `QA`. It can also be started manually on the `QA` ref. Only the `QA` branch job runs, and its GitHub environment is `qa`.
 
