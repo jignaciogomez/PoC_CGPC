@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Turn an ADF export into a QA-only ARM template and parameter file.
 
-The Dev linked service contains a factory-bound encryptedCredential. This script
-removes it from the disposable QA artifact and uses the QA factory's managed identity.
-It also replaces the ADLS endpoint and filesystem without changing Git source.
+The Dev linked service contains a factory-bound encryptedCredential. The ADF
+exporter turns it into an accountKey parameter. This script removes that key
+from the disposable QA artifact so the existing QA factory uses its managed
+identity. It also replaces the ADLS endpoint and filesystem without changing
+Git source.
 """
 import argparse
 import json
@@ -23,35 +25,26 @@ def one_resource(resources, kind, name=None):
     return matches[0]
 
 
-def prepare(template, factory_name, location, account, filesystem):
+def prepare(template, factory_name, account, filesystem):
     if not ACCOUNT.fullmatch(account) or account == "devcgpcpocadls":
         raise ValueError("QA storage account must be a valid account distinct from Dev")
     if not FILESYSTEM.fullmatch(filesystem) or "--" in filesystem:
         raise ValueError("QA filesystem name is invalid")
     if not factory_name or factory_name == "dev-cgpc-poc":
         raise ValueError("QA factory name must differ from Dev")
-    if not location:
-        raise ValueError("QA factory location is required")
-
     resources = template["resources"]
-    factory = one_resource(resources, "Microsoft.DataFactory/factories")
     adls = one_resource(resources, "Microsoft.DataFactory/factories/linkedservices", "LS_AdlsGen2")
     dataset = one_resource(resources, "Microsoft.DataFactory/factories/datasets", "DS_RandomUserLanding")
     one_resource(resources, "Microsoft.DataFactory/factories/pipelines", "PL_LoadRandomUsers")
 
-    factory["location"] = location
-    identity = factory.get("identity")
-    if identity is not None:
-        if identity.get("type") != "SystemAssigned":
-            raise ValueError("QA factory identity must be system-assigned")
-        factory["identity"] = {"type": "SystemAssigned"}
     link_properties = adls["properties"]
     if link_properties.get("type") != "AzureBlobFS":
         raise ValueError("LS_AdlsGen2 is not an ADLS Gen2 linked service")
     link_type_properties = link_properties["typeProperties"]
     link_type_properties["url"] = f"https://{account}.dfs.core.windows.net/"
     link_type_properties.pop("encryptedCredential", None)
-    if any(key in link_type_properties for key in ("accountKey", "accountkey", "sasUri", "sasToken", "servicePrincipalCredential")):
+    link_type_properties.pop("accountKey", None)
+    if any(key in link_type_properties for key in ("accountkey", "sasUri", "sasToken", "servicePrincipalId", "servicePrincipalCredentialType", "servicePrincipalCredential", "credential", "credentials")):
         raise ValueError("QA ADLS linked service still contains a credential property")
 
     location_properties = dataset["properties"]["typeProperties"]["location"]
@@ -77,9 +70,10 @@ def prepare(template, factory_name, location, account, filesystem):
                 if "defaultValue" not in spec and name != factory_names[0]]
     if required:
         raise ValueError(f"Export has unresolved required parameters: {required}")
+    parameters[factory_names[0]]["defaultValue"] = factory_name
 
     rendered = json.dumps(template)
-    if "encryptedCredential" in rendered or "devcgpcpocadls" in rendered:
+    if "encryptedCredential" in rendered or "devcgpcpocadls" in rendered or "accountKey" in rendered:
         raise ValueError("QA artifact still contains a Dev credential or storage endpoint")
 
     parameter_file = {
@@ -96,13 +90,12 @@ def main():
     parser.add_argument("--output-template", type=Path, required=True)
     parser.add_argument("--output-parameters", type=Path, required=True)
     parser.add_argument("--factory-name", required=True)
-    parser.add_argument("--location", required=True)
     parser.add_argument("--storage-account", required=True)
     parser.add_argument("--filesystem", required=True)
     args = parser.parse_args()
     template = json.loads(args.template.read_text())
     qa_template, qa_parameters = prepare(
-        template, args.factory_name, args.location, args.storage_account, args.filesystem
+        template, args.factory_name, args.storage_account, args.filesystem
     )
     args.output_template.parent.mkdir(parents=True, exist_ok=True)
     args.output_parameters.parent.mkdir(parents=True, exist_ok=True)
