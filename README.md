@@ -4,10 +4,10 @@
 
 ```text
 Random User API -> Dev ADF Copy -> Dev ADLS Gen2 sales/landing/users.json
-                -> QA ADF Copy  -> QA ADLS Gen2 sales/landing/users.json
+                -> QA ADF Copy  -> QA storage sales/landing/users.json
 ```
 
-`PL_LoadRandomUsers` calls `https://randomuser.me/api/?results=1000&exc=login` with ADF's HTTP connector and writes the **entire JSON response** to ADLS Gen2 with a Binary Copy activity. The `results` array holds the 1,000 user rows; `info` retains the API seed and version. ADF does not reshape the JSON. Each run replaces `users.json`. The API response changes between runs because the URL has no fixed seed.
+`PL_LoadRandomUsers` calls `https://randomuser.me/api/?results=1000&exc=login` with ADF's HTTP connector and writes the **entire JSON response** to the configured storage destination with a Binary Copy activity. The `results` array holds the 1,000 user rows; `info` retains the API seed and version. ADF does not reshape the JSON. Each run replaces `users.json`. The API response changes between runs because the URL has no fixed seed.
 
 ## Configure Dev
 
@@ -17,11 +17,11 @@ Random User API -> Dev ADF Copy -> Dev ADLS Gen2 sales/landing/users.json
 
 ## Promote ADF ingestion to QA
 
-`.github/workflows/promote-qa.yml` runs when reviewed source is pushed to `QA`. It can also be dispatched manually after the workflow exists on GitHub's default branch. The workflow validates source, exports the ADF JSON with Microsoft's utility, prepares a temporary QA ARM artifact, deploys it to the QA ADF factory, runs `PL_LoadRandomUsers`, and checks that `landing/users.json` exists in the QA ADLS filesystem. This QA test covers ADF ingestion only.
+`.github/workflows/promote-qa.yml` runs when reviewed source is pushed to `QA`. It can also be dispatched manually after the workflow exists on GitHub's default branch. The workflow validates source, exports the ADF JSON with Microsoft's utility, prepares a temporary QA ARM artifact, deploys it to the QA ADF factory, and runs `PL_LoadRandomUsers`. The workflow succeeds when the ADF pipeline run succeeds; it does not inspect the output file. This QA test covers ADF ingestion only.
 
-The Dev linked service contains a factory-bound `encryptedCredential` added by ADF Studio. Microsoft's ADF export converts it to an `accountKey` parameter. The QA build script removes that key **only from the temporary deployment artifact** and substitutes the QA ADLS endpoint and filesystem. The export contains child resources, so the QA factory must already exist with its system-assigned managed identity enabled. The Git source remains unchanged. [Microsoft documents](https://learn.microsoft.com/en-us/azure/data-factory/continuous-integration-delivery-resource-manager-custom-parameters) why the Dev encrypted credential cannot be reused in another factory.
+The Dev linked service contains a factory-bound `encryptedCredential` added by ADF Studio. Microsoft's ADF export converts it to an `accountKey` parameter. The QA build script removes that key **only from the temporary deployment artifact** and substitutes the QA storage endpoint and container/filesystem. The export contains child resources, so the QA factory must already exist with its system-assigned managed identity enabled. The Git source remains unchanged. [Microsoft documents](https://learn.microsoft.com/en-us/azure/data-factory/continuous-integration-delivery-resource-manager-custom-parameters) why the Dev encrypted credential cannot be reused in another factory.
 
-Before the first QA branch push, create the QA ADF factory and QA ADLS Gen2 account/filesystem. Enable the QA factory's system-assigned identity and grant it **Storage Blob Data Contributor** on the QA destination. The GitHub Azure deployment identity needs permission to deploy resources to the QA resource group and **Storage Blob Data Reader** on the QA ADLS filesystem for the final file check. Confirm storage firewall access for the ADF integration runtime and GitHub runner.
+Before the first QA branch push, create the QA ADF factory and QA storage account with a `sales` container or filesystem. Enable the QA factory's system-assigned identity and grant it **Storage Blob Data Contributor** on the QA destination. The GitHub Azure deployment identity needs permission to deploy resources to the QA resource group. Confirm storage firewall access for the ADF integration runtime.
 
 Configure GitHub environment `qa` with these variables:
 
@@ -33,7 +33,7 @@ Configure GitHub environment `qa` with these variables:
 | `QA_ADLS_ACCOUNT_NAME` | `qacgpcpocadls` |
 | `QA_ADLS_FILE_SYSTEM` | `sales` |
 
-Add environment secrets `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and `AZURE_SUBSCRIPTION_ID`. The QA resources are in subscription `b2ab32d1-8c22-4a4e-acdd-94746d481eb1`. Configure Azure OIDC federation for this repository's `qa` GitHub environment, and protect the `qa` environment and QA branch before merging `Dev` into `QA`. The Azure deployment identity also needs QA ADLS read access for the final file check.
+Add environment secrets `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and `AZURE_SUBSCRIPTION_ID`. The QA resources are in subscription `b2ab32d1-8c22-4a4e-acdd-94746d481eb1`. Configure Azure OIDC federation for this repository's `qa` GitHub environment, and protect the `qa` environment and QA branch before merging `Dev` into `QA`.
 
 The `adf_publish` branch remains the Live publishing output for the Dev factory. QA deploys from the reviewed `QA` source branch.
 

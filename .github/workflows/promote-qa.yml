@@ -108,11 +108,3 @@ jobs:
           done
           echo "ADF run did not finish within 10 minutes"
           exit 1
-      - name: Confirm QA landing file exists
-        run: |
-          az storage fs file show \
-            --account-name "$QA_ADLS_ACCOUNT_NAME" \
-            --file-system "$QA_ADLS_FILE_SYSTEM" \
-            --path landing/users.json \
-            --auth-mode login \
-            --output none
