@@ -1,8 +1,20 @@
 # ADF promotion PoC
 
+For setup, deployment files, and the full promotion process, see the [ADF promotion guide](docs/ADF_PROMOTION_GUIDE.md).
+
 The DEV factory `dev-cgpc-poc` is connected to this repository on collaboration branch `Dev` with ADF root `/adf`. Its publish branch is `adf_publish`. Only DEV uses ADF Git integration; downstream factories receive reviewed source through deployments as their workflows are added. The intended Git promotion path is feature branch → `Dev` → `QA` → `UAT` → `Prod`, with a protected branch and PR review at every merge. Configure those branch rules in GitHub; the current deployment workflow implements the `QA` step.
 
 The example pipeline `PL_LoadRandomUsers` copies the complete JSON response from `https://randomuser.me/api/?results=1000&exc=login` to `sales/landing/users.json`. It does not flatten the `results` array. Its pipeline, dataset, and linked service names remain the same in every factory.
+
+## Data architecture
+
+```mermaid
+flowchart LR
+    API[External Random User API] -->|JSON response| ADF[ADF: PL_LoadRandomUsers]
+    ADF -->|Copy activity| ADLS[ADLS Gen2: sales/landing/users.json]
+```
+
+DEV and QA use the same ADF artifact names. Each factory writes to its own storage account; the QA storage URL and filesystem are supplied during deployment. The QA deployment workflow creates or updates ADF definitions and does not run this data flow.
 
 ## Environment configuration
 
@@ -19,6 +31,8 @@ Set `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and `AZURE_SUBSCRIPTION_ID` as GitHub 
 Both factories' `LS_AdlsGen2` linked services use their respective factory managed identities. Grant each factory identity data-plane write access to its own storage destination (for example, Storage Blob Data Contributor) and verify any storage firewall and ADLS ACL settings before *running* a pipeline. Deployment itself does not run or inspect a pipeline. The existing QA storage account was previously reported as lacking hierarchical namespace; check its storage configuration when preparing an end-to-end ADLS Gen2 runtime test.
 
 ## QA deployment
+
+For a short map of the workflow steps and connected files, see the [QA workflow guide](docs/PROMOTE_QA_WORKFLOW.md).
 
 When reviewed changes land on `QA`, [the workflow](.github/workflows/promote-qa.yml) exports all ADF source with Microsoft's ADF utility, validates the environment configuration, then runs ARM validation and incremental deployment against `qa-cgpc-poc`. An incremental deployment updates the resources included in the full export; it does not delete resources omitted from the export. A manual dispatch from `QA` can redeploy the reviewed state after an accidental change in the QA factory. The workflow can be dispatched manually once available on GitHub's default branch.
 
