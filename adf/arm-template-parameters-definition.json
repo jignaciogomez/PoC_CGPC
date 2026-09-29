@@ -14,5 +14,25 @@
         "value": "="
       }
     }
+  },
+  "Microsoft.DataFactory/factories/linkedServices": {
+    "AzureBlobFS": {
+      "properties": {
+        "typeProperties": {
+          "url": "-:-url:string"
+        }
+      }
+    }
+  },
+  "Microsoft.DataFactory/factories/datasets": {
+    "*": {
+      "properties": {
+        "typeProperties": {
+          "location": {
+            "fileSystem": "-:-fileSystem:string"
+          }
+        }
+      }
+    }
   }
 }
