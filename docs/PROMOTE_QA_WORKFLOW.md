@@ -3,7 +3,7 @@
 ## Executive summary
 
 ```mermaid
-flowchart LR
+flowchart TD
     QA[Merge reviewed PR into QA] --> CHECK[Run deployment checks]
     CHECK --> LOGIN[Authenticate GitHub Actions with Azure]
     LOGIN --> EXPORT[Validate ADF JSON and export ARM template]
