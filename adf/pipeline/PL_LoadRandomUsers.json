@@ -1,7 +1,7 @@
 {
   "name": "PL_LoadRandomUsers",
   "properties": {
-    "description": "Copy the full Random User API JSON response to ADLS Gen2. The results array contains the requested user rows.",
+    "description": "Copy XXXX the full Random User API JSON response to ADLS Gen2. The results array contains the requested user rows.",
     "activities": [
       {
         "name": "CopyRandomUserApiToAdls",
