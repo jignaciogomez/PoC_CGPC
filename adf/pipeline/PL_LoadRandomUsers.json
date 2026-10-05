@@ -1,7 +1,7 @@
 {
   "name": "PL_LoadRandomUsers",
   "properties": {
-    "description": "Copy XXXX the full Random User API JSON response to ADLS Gen2. The results array contains the requested user rows.",
+    "description": "Copy the full Random User API JSON response to an immutable ADLS Gen2 file for this pipeline run.",
     "activities": [
       {
         "name": "CopyRandomUserApiToAdls",
@@ -40,7 +40,13 @@
         "outputs": [
           {
             "referenceName": "DS_RandomUserLanding",
-            "type": "DatasetReference"
+            "type": "DatasetReference",
+            "parameters": {
+              "file_name": {
+                "value": "@concat('users_',pipeline().RunId,'.json')",
+                "type": "Expression"
+              }
+            }
           }
         ]
       }

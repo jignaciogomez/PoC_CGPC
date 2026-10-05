@@ -1,0 +1,57 @@
+name: Apply QA Databricks changes
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Select one approved QA operation
+        required: true
+        type: choice
+        options:
+          - definitions
+          - example_data
+          - ingestion
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: qa-databricks
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    if: github.ref == 'refs/heads/QA'
+    runs-on: ubuntu-latest
+    environment: qa
+    env:
+      DATABRICKS_AUTH_TYPE: github-oidc
+      DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
+      DATABRICKS_CLIENT_ID: ${{ vars.DATABRICKS_CLIENT_ID }}
+      SOURCE_DATABRICKS_HOST: ${{ vars.SOURCE_DATABRICKS_HOST }}
+      DATABRICKS_BUNDLE_VAR_workspace_host: ${{ vars.DATABRICKS_HOST }}
+      DATABRICKS_BUNDLE_VAR_landing_volume_path: ${{ vars.DATABRICKS_LANDING_VOLUME_PATH }}
+      DATABRICKS_BUNDLE_VAR_checkpoint_path: ${{ vars.DATABRICKS_CHECKPOINT_PATH }}
+    defaults:
+      run:
+        working-directory: databricks/bundles
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check separate QA workspace and paths
+        run: python ../../scripts/check_databricks_target.py qa
+      - name: Install Databricks CLI
+        uses: databricks/setup-cli@main
+      - name: Validate deployed bundle
+        run: databricks bundle validate --target qa
+      - name: Apply selected operation
+        env:
+          OPERATION: ${{ inputs.operation }}
+        run: |
+          case "$OPERATION" in
+            definitions) job=apply_definitions ;;
+            example_data) job=apply_example_data ;;
+            ingestion) job=ingest_random_users ;;
+            *) exit 1 ;;
+          esac
+          databricks bundle run --target qa "$job"

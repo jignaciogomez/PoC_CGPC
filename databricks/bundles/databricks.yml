@@ -1,0 +1,44 @@
+bundle:
+  name: edp-data-products
+  engine: direct
+
+include:
+  - resources/*.yml
+
+sync:
+  paths:
+    - .
+    - ../src
+
+variables:
+  # GitHub environment variables supply the host and paths; no workspace URL or
+  # storage account is embedded in a deployable artifact.
+  workspace_host:
+    description: HTTPS origin of the selected Databricks workspace.
+  landing_volume_path:
+    description: Environment-specific external volume directory containing ADF files.
+  checkpoint_path:
+    description: Environment-specific UC volume path for Auto Loader state.
+  platform_catalog:
+    description: Config and audit catalog.
+  bronze_catalog:
+    description: Bronze sales catalog.
+  environment:
+    description: Target environment label.
+
+targets:
+  dev:
+    mode: development
+    default: true
+    variables:
+      environment: dev
+      platform_catalog: dev_scratch_ca
+      bronze_catalog: dev_bronze_ca
+  qa:
+    mode: production
+    git:
+      branch: QA
+    variables:
+      environment: qa
+      platform_catalog: edp_qa
+      bronze_catalog: qa_bronze_ca
