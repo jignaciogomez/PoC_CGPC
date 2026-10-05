@@ -1,0 +1,381 @@
+schema: audit
+
+tables:
+
+  # =========================================================================
+  # AUDIT - INGESTION TABLES
+  # =========================================================================
+
+  - name: ingestion_pipeline_run
+    comment: "Immutable header for an EDP orchestration run."
+    using: DELTA
+    partitioned_by: [event_date]
+    columns:
+      - { name: pipeline_run_id,       type: STRING,    not_null: true, comment: "Unique identifier of the ingestion pipeline run." }
+      - { name: edp_run_id,            type: STRING,    not_null: true, comment: "Common EDP correlation identifier." }
+      - { name: environment,           type: STRING,    not_null: true, comment: "Development, QA, or Production." }
+      - { name: execution_attempt_id,  type: INT,       not_null: true, comment: "Execution attempt number for retried runs." }
+      - { name: orchestrator_name,     type: STRING,    not_null: true, comment: "Airflow DAG identifier or orchestrator name." }
+      - { name: orchestrator_run_id,   type: STRING,                    comment: "Native run identifier emitted by the orchestrator." }
+      - { name: config_snapshot_id,    type: STRING,    not_null: true, comment: "Configuration snapshot used by the run." }
+      - { name: started_at,            type: TIMESTAMP, not_null: true, comment: "Run start timestamp." }
+      - { name: completed_at,          type: TIMESTAMP,                 comment: "Timestamp when execution completed." }
+      - { name: final_status,          type: STRING,    not_null: true, comment: "Final execution status for the run." }
+      - { name: rows_read,             type: BIGINT,                    comment: "Total number of rows read during execution." }
+      - { name: rows_written,          type: BIGINT,                    comment: "Total number of rows written during execution." }
+      - { name: rows_error,            type: BIGINT,                    comment: "Total number of rows that failed processing." }
+      - { name: compute_seconds,       type: BIGINT,                    comment: "Total compute time consumed in seconds." }
+      - { name: estimated_cost_usd,    type: "DECIMAL(12,4)",           comment: "Estimated execution cost in USD." }
+      - { name: sla_minutes_configured, type: INT,                      comment: "SLA threshold in minutes." }
+      - { name: sla_breached_flag,     type: BOOLEAN,   not_null: true, default: "false", comment: "True if run exceeded SLA." }
+      - { name: event_date,            type: DATE,      not_null: true, comment: "Event date used for partitioning and retention." }
+      - { name: ingested_at,           type: TIMESTAMP, not_null: true, comment: "Timestamp when this audit record was ingested." }
+    primary_key:
+      name: pk_ipr
+      columns: [pipeline_run_id]
+    check_constraints:
+      - name: chk_ipr_env
+        expression: "environment IN ('dev','qa','prod')"
+
+  - name: ingestion_pipeline_task_event
+    comment: "Append-only cross-tool pipeline and task event history."
+    using: DELTA
+    partitioned_by: [event_date]
+    columns:
+      - { name: task_event_id,  type: STRING,    not_null: true, comment: "Unique event identifier." }
+      - { name: pipeline_run_id, type: STRING,   not_null: true, comment: "Unique identifier of the ingestion pipeline run." }
+      - { name: edp_run_id,      type: STRING,   not_null: true, comment: "Common EDP run identifier." }
+      - { name: task_name,       type: STRING,   not_null: true, comment: "Logical task name executed within the pipeline." }
+      - { name: task_type,       type: STRING,                   comment: "Task category or implementation type." }
+      - { name: event_type,      type: STRING,   not_null: true, comment: "STARTED, HEARTBEAT, ADF_COMPLETED, AUTOLOADER_COMPLETED, COMPLETED, FAILED, or SKIPPED." }
+      - { name: status,          type: STRING,   not_null: true, comment: "Status reported at the event or entity level." }
+      - { name: tool_name,       type: STRING,                   comment: "Tool that produced the event or metric." }
+      - { name: tool_run_id,     type: STRING,                   comment: "Native tool-run identifier." }
+      - { name: started_at,      type: TIMESTAMP,                comment: "Timestamp when execution started." }
+      - { name: ended_at,        type: TIMESTAMP,                comment: "Timestamp when execution ended." }
+      - { name: duration_ms,     type: BIGINT,                   comment: "Task duration measured in milliseconds." }
+      - { name: input_rows,      type: BIGINT,                   comment: "Input row count observed for the task." }
+      - { name: output_rows,     type: BIGINT,                   comment: "Output row count produced by the task." }
+      - { name: error_rows,      type: BIGINT,                   comment: "Row count that failed during task execution." }
+      - { name: event_ts,        type: TIMESTAMP, not_null: true, comment: "Event timestamp." }
+      - { name: event_date,      type: DATE,      not_null: true, comment: "Event date used for partitioning and retention." }
+      - { name: ingested_at,     type: TIMESTAMP, not_null: true, comment: "Timestamp when this audit record was ingested." }
+    primary_key:
+      name: pk_ipte
+      columns: [task_event_id]
+
+  - name: ingestion_error_event
+    comment: "Append-only normalized error evidence."
+    using: DELTA
+    partitioned_by: [event_date]
+    columns:
+      - { name: error_event_id,     type: STRING,  not_null: true, comment: "Unique error-event identifier." }
+      - { name: pipeline_run_id,    type: STRING,  not_null: true, comment: "Unique identifier of the ingestion pipeline run." }
+      - { name: edp_run_id,         type: STRING,  not_null: true, comment: "Common EDP run identifier." }
+      - { name: task_event_id,      type: STRING,                  comment: "Unique identifier of the task-level event." }
+      - { name: error_code,         type: STRING,  not_null: true, comment: "Normalized error code." }
+      - { name: error_category,     type: STRING,                  comment: "Normalized error category for triage and reporting." }
+      - { name: severity,           type: STRING,  not_null: true, comment: "Error severity." }
+      - { name: retriable_flag,     type: BOOLEAN, not_null: true, comment: "Whether the error is considered transient." }
+      - { name: source_component,   type: STRING,                  comment: "AIRFLOW, ADF, DATABRICKS, or another source." }
+      - { name: exception_class,    type: STRING,                  comment: "Exception class captured from the source tool." }
+      - { name: exception_message,  type: STRING,                  comment: "Sanitized error message." }
+      - { name: stack_trace_hash,   type: STRING,                  comment: "Hash of stack trace to group repeated failures." }
+      - { name: recommended_action, type: STRING,                  comment: "Suggested remediation action for the error." }
+      - { name: event_date,         type: DATE,    not_null: true, comment: "Event date used for partitioning and retention." }
+      - { name: ingested_at,        type: TIMESTAMP, not_null: true, comment: "Timestamp when this audit record was ingested." }
+    primary_key:
+      name: pk_iee
+      columns: [error_event_id]
+
+  - name: ingestion_entity_run
+    comment: "Final entity-level ingestion outcome and workload metrics."
+    using: DELTA
+    partitioned_by: [event_date]
+    columns:
+      - { name: entity_run_id,            type: STRING,   not_null: true, comment: "Unique identifier for the ingestion entity execution." }
+      - { name: pipeline_run_id,          type: STRING,   not_null: true, comment: "Unique identifier of the ingestion pipeline run." }
+      - { name: edp_run_id,               type: STRING,   not_null: true, comment: "Common EDP run identifier." }
+      - { name: ingestion_entity_id,      type: STRING,   not_null: true, comment: "Entity executed." }
+      - { name: source_system_code,       type: STRING,   not_null: true, comment: "Source-system code associated with the processed entity." }
+      - { name: source_entity_name,       type: STRING,   not_null: true, comment: "Source entity name processed in this execution." }
+      - { name: load_type,                type: STRING,   not_null: true, comment: "Load mode used by the execution (full, incremental, or cdc)." }
+      - { name: watermark_start_value,    type: STRING,                   comment: "Watermark used to begin the run." }
+      - { name: watermark_end_value,      type: STRING,                   comment: "Successful ending watermark." }
+      - { name: files_processed_count,    type: BIGINT,                   comment: "Number of files processed for the entity run." }
+      - { name: records_loaded_count,     type: BIGINT,                   comment: "Records written." }
+      - { name: started_at,               type: TIMESTAMP, not_null: true, comment: "Entity start timestamp." }
+      - { name: completed_at,             type: TIMESTAMP,                 comment: "Entity end timestamp." }
+      - { name: final_status,             type: STRING,    not_null: true, comment: "Final execution status for the run." }
+      - { name: sla_minutes_configured,   type: INT,                       comment: "SLA threshold in minutes." }
+      - { name: sla_breached_flag,        type: BOOLEAN,   not_null: true, default: "false", comment: "True if entity run exceeded SLA." }
+      - { name: pii_detected_flag,        type: BOOLEAN,   not_null: true, default: "false", comment: "PII detected in output." }
+      - { name: event_date,               type: DATE,      not_null: true, comment: "Event date used for partitioning and retention." }
+      - { name: ingested_at,              type: TIMESTAMP, not_null: true, comment: "Timestamp when this audit record was ingested." }
+    primary_key:
+      name: pk_ier
+      columns: [entity_run_id]
+
+  - name: ingestion_file_audit
+    comment: "File-level evidence connecting landed files to Bronze processing."
+    using: DELTA
+    partitioned_by: [event_date]
+    columns:
+      - { name: ingestion_file_audit_id, type: STRING,    not_null: true, comment: "Unique identifier for the file-level audit record." }
+      - { name: entity_run_id,           type: STRING,    not_null: true, comment: "Unique identifier for the ingestion entity execution." }
+      - { name: pipeline_run_id,         type: STRING,    not_null: true, comment: "Unique identifier of the ingestion pipeline run." }
+      - { name: edp_run_id,              type: STRING,    not_null: true, comment: "Common EDP run identifier." }
+      - { name: source_file_uri,         type: STRING,    not_null: true, comment: "Full landed-file path." }
+      - { name: source_file_name,        type: STRING,    not_null: true, comment: "Landed file name." }
+      - { name: source_file_size_bytes,  type: BIGINT,                    comment: "Landed file size." }
+      - { name: landed_ts,               type: TIMESTAMP,                 comment: "File landing timestamp." }
+      - { name: processed_ts,            type: TIMESTAMP,                 comment: "Bronze processing timestamp." }
+      - { name: processing_status,       type: STRING,    not_null: true, comment: "Current processing status of the landed file." }
+      - { name: records_read_count,      type: BIGINT,                    comment: "Number of records read from the landed file." }
+      - { name: records_written_count,   type: BIGINT,                    comment: "Number of records written from the landed file." }
+      - { name: error_code,              type: STRING,                    comment: "Normalized error code for this event." }
+      - { name: error_message,           type: STRING,                    comment: "Sanitized error message for operations." }
+      - { name: event_date,              type: DATE,      not_null: true, comment: "Event date used for partitioning and retention." }
+      - { name: ingested_at,             type: TIMESTAMP, not_null: true, comment: "Timestamp when this audit record was ingested." }
+    primary_key:
+      name: pk_ifa
+      columns: [ingestion_file_audit_id]
+
+  - name: ingestion_watermark_state
+    comment: "Current successful watermark for incremental entities."
+    using: DELTA
+    columns:
+      - { name: watermark_state_id,          type: STRING,    not_null: true, comment: "Unique identifier for the watermark state record." }
+      - { name: ingestion_entity_id,         type: STRING,    not_null: true, comment: "Entity owning the watermark." }
+      - { name: environment,                 type: STRING,    not_null: true, comment: "Development, QA, or Production." }
+      - { name: watermark_column_name,       type: STRING,    not_null: true, comment: "Source column used to compute watermark progression." }
+      - { name: watermark_data_type,         type: STRING,    not_null: true, comment: "Data type of the watermark value." }
+      - { name: current_watermark_value,     type: STRING,    not_null: true, comment: "Current successful watermark." }
+      - { name: last_success_pipeline_run_id, type: STRING,                   comment: "Successful run that advanced the watermark." }
+      - { name: last_attempt_pipeline_run_id, type: STRING,                   comment: "Most recent ingestion run attempt that touched this watermark." }
+      - { name: state_status,                type: STRING,    not_null: true, comment: "Current lifecycle status of the watermark state." }
+      - { name: updated_at,                  type: TIMESTAMP, not_null: true, comment: "Watermark update timestamp." }
+      - { name: updated_by,                  type: STRING,    not_null: true, comment: "Identity or process that last updated the row." }
+      - { name: metadata_json,               type: STRING,                    comment: "Additional non-sensitive metadata serialized as JSON." }
+    primary_key:
+      name: pk_iws
+      columns: [watermark_state_id]
+    check_constraints:
+      - name: chk_iws_env
+        expression: "environment IN ('dev','qa','prod')"
+
+  - name: ingestion_dq_validation_result
+    comment: "Append-only record of ingestion data-quality rule execution results."
+    using: DELTA
+    partitioned_by: [event_date]
+    columns:
+      - { name: ingestion_dq_result_id, type: STRING,            not_null: true, comment: "Unique identifier for the ingestion data-quality result." }
+      - { name: pipeline_run_id,        type: STRING,            not_null: true, comment: "Unique identifier of the ingestion pipeline run." }
+      - { name: edp_run_id,             type: STRING,            not_null: true, comment: "Common end-to-end EDP run correlation identifier." }
+      - { name: entity_run_id,          type: STRING,            not_null: true, comment: "Unique identifier for the ingestion entity execution." }
+      - { name: ingestion_entity_id,    type: STRING,            not_null: true, comment: "Unique identifier of the ingestion entity configuration." }
+      - { name: rule_set_id,            type: STRING,            not_null: true, comment: "Identifier of the data-quality rule set executed." }
+      - { name: rule_id,                type: STRING,            not_null: true, comment: "Identifier of the executed data-quality rule." }
+      - { name: rule_name,              type: STRING,            not_null: true, comment: "Human-readable name of the data-quality rule." }
+      - { name: rule_severity,          type: STRING,            not_null: true, comment: "Severity level assigned to the rule." }
+      - { name: validation_status,      type: STRING,            not_null: true, comment: "Validation outcome status for the rule evaluation." }
+      - { name: quality_disposition,    type: STRING,            not_null: true, comment: "Disposition decided from quality evaluation results." }
+      - { name: evaluated_rows,         type: BIGINT,                           comment: "Number of rows evaluated by the quality rule." }
+      - { name: failed_rows,            type: BIGINT,                           comment: "Number of rows that failed the quality rule." }
+      - { name: failure_rate_pct,       type: "DECIMAL(9,4)",                   comment: "Failure percentage computed from evaluated and failed rows." }
+      - { name: evaluated_at,           type: TIMESTAMP,         not_null: true, comment: "Timestamp when quality evaluation finished." }
+      - { name: event_date,             type: DATE,              not_null: true, comment: "Event date used for partitioning and retention." }
+      - { name: ingested_at,            type: TIMESTAMP,         not_null: true, comment: "Timestamp when this audit record was ingested." }
+    primary_key:
+      name: pk_idqvr
+      columns: [ingestion_dq_result_id]
+
+  # =========================================================================
+  # AUDIT - TRANSFORMATION TABLES
+  # =========================================================================
+
+  - name: transformation_pipeline_run
+    comment: "Immutable header for an EDP orchestration run (transformation domain)."
+    using: DELTA
+    partitioned_by: [event_date]
+    columns:
+      - { name: transformation_pipeline_run_id, type: STRING,    not_null: true, comment: "Unique identifier of the transformation pipeline run." }
+      - { name: edp_run_id,                     type: STRING,    not_null: true, comment: "Common end-to-end EDP run correlation identifier." }
+      - { name: environment,                    type: STRING,    not_null: true, comment: "Deployment environment for this record (dev, qa, or prod)." }
+      - { name: execution_attempt_id,           type: INT,       not_null: true, comment: "Execution attempt number for retried runs." }
+      - { name: orchestrator_name,              type: STRING,    not_null: true, comment: "Name of the orchestrator that executed the run." }
+      - { name: orchestrator_run_id,            type: STRING,                    comment: "Native run identifier emitted by the orchestrator." }
+      - { name: config_snapshot_id,             type: STRING,    not_null: true, comment: "Transformation configuration snapshot identifier used by the run." }
+      - { name: started_at,                     type: TIMESTAMP, not_null: true, comment: "Timestamp when execution started." }
+      - { name: completed_at,                   type: TIMESTAMP,                 comment: "Timestamp when execution completed." }
+      - { name: final_status,                   type: STRING,    not_null: true, comment: "Final execution status for the run." }
+      - { name: rows_read,                      type: BIGINT,                    comment: "Total number of rows read during execution." }
+      - { name: rows_written,                   type: BIGINT,                    comment: "Total number of rows written during execution." }
+      - { name: rows_error,                     type: BIGINT,                    comment: "Total number of rows that failed processing." }
+      - { name: compute_seconds,                type: BIGINT,                    comment: "Total compute time consumed in seconds." }
+      - { name: estimated_cost_usd,             type: "DECIMAL(12,4)",           comment: "Estimated execution cost in USD." }
+      - { name: sla_minutes_configured,         type: INT,                       comment: "SLA threshold in minutes." }
+      - { name: sla_breached_flag,              type: BOOLEAN,   not_null: true, default: "false", comment: "True if run exceeded SLA." }
+      - { name: event_date,                     type: DATE,      not_null: true, comment: "Event date used for partitioning and retention." }
+      - { name: ingested_at,                    type: TIMESTAMP, not_null: true, comment: "Timestamp when this audit record was ingested." }
+    primary_key:
+      name: pk_tpr
+      columns: [transformation_pipeline_run_id]
+    check_constraints:
+      - name: chk_tpr_env
+        expression: "environment IN ('dev','qa','prod')"
+
+  - name: transformation_pipeline_task_event
+    comment: "Append-only cross-tool pipeline and task event history (transformation domain)."
+    using: DELTA
+    partitioned_by: [event_date]
+    columns:
+      - { name: task_event_id,                  type: STRING,    not_null: true, comment: "Unique identifier of the task-level event." }
+      - { name: transformation_pipeline_run_id, type: STRING,    not_null: true, comment: "Unique identifier of the transformation pipeline run." }
+      - { name: edp_run_id,                     type: STRING,    not_null: true, comment: "Common end-to-end EDP run correlation identifier." }
+      - { name: task_name,                      type: STRING,    not_null: true, comment: "Logical task name executed within the pipeline." }
+      - { name: task_type,                      type: STRING,                    comment: "Task category or implementation type." }
+      - { name: event_type,                     type: STRING,    not_null: true, comment: "Event type emitted for task lifecycle tracking." }
+      - { name: status,                         type: STRING,    not_null: true, comment: "Status reported at the event or entity level." }
+      - { name: tool_name,                      type: STRING,                    comment: "Tool that produced the event or metric." }
+      - { name: tool_run_id,                    type: STRING,                    comment: "Native run identifier emitted by the executing tool." }
+      - { name: started_at,                     type: TIMESTAMP,                 comment: "Timestamp when execution started." }
+      - { name: ended_at,                       type: TIMESTAMP,                 comment: "Timestamp when execution ended." }
+      - { name: duration_ms,                    type: BIGINT,                    comment: "Task duration measured in milliseconds." }
+      - { name: input_rows,                     type: BIGINT,                    comment: "Input row count observed for the task." }
+      - { name: output_rows,                    type: BIGINT,                    comment: "Output row count produced by the task." }
+      - { name: error_rows,                     type: BIGINT,                    comment: "Row count that failed during task execution." }
+      - { name: event_ts,                       type: TIMESTAMP, not_null: true, comment: "Timestamp when the task event occurred." }
+      - { name: event_date,                     type: DATE,      not_null: true, comment: "Event date used for partitioning and retention." }
+      - { name: ingested_at,                    type: TIMESTAMP, not_null: true, comment: "Timestamp when this audit record was ingested." }
+    primary_key:
+      name: pk_tpte
+      columns: [task_event_id]
+
+  - name: transformation_error_event
+    comment: "Append-only normalized error evidence (transformation domain)."
+    using: DELTA
+    partitioned_by: [event_date]
+    columns:
+      - { name: error_event_id,                 type: STRING,  not_null: true, comment: "Unique identifier of the transformation error event." }
+      - { name: transformation_pipeline_run_id, type: STRING,  not_null: true, comment: "Unique identifier of the transformation pipeline run." }
+      - { name: edp_run_id,                     type: STRING,  not_null: true, comment: "Common end-to-end EDP run correlation identifier." }
+      - { name: task_event_id,                  type: STRING,                  comment: "Unique identifier of the task-level event." }
+      - { name: error_code,                     type: STRING,  not_null: true, comment: "Normalized error code for this event." }
+      - { name: error_category,                 type: STRING,                  comment: "Normalized error category for triage and reporting." }
+      - { name: severity,                       type: STRING,  not_null: true, comment: "Severity level assigned to the error event." }
+      - { name: retriable_flag,                 type: BOOLEAN, not_null: true, comment: "Whether the error can be retried safely." }
+      - { name: source_component,               type: STRING,                  comment: "Component that originated the error (Airflow, dbt, Databricks, etc.)." }
+      - { name: exception_class,                type: STRING,                  comment: "Exception class captured from the source tool." }
+      - { name: exception_message,              type: STRING,                  comment: "Sanitized exception message captured for diagnostics." }
+      - { name: stack_trace_hash,               type: STRING,                  comment: "Hash of stack trace to group repeated failures." }
+      - { name: recommended_action,             type: STRING,                  comment: "Suggested remediation action for the error." }
+      - { name: event_date,                     type: DATE,    not_null: true, comment: "Event date used for partitioning and retention." }
+      - { name: ingested_at,                    type: TIMESTAMP, not_null: true, comment: "Timestamp when this audit record was ingested." }
+    primary_key:
+      name: pk_tee
+      columns: [error_event_id]
+
+  - name: transformation_dbt_run
+    comment: "Run-level dbt execution summary for transformation."
+    using: DELTA
+    partitioned_by: [event_date]
+    columns:
+      - { name: dbt_run_id,                     type: STRING,   not_null: true, comment: "Unique identifier of the dbt run." }
+      - { name: transformation_pipeline_run_id, type: STRING,   not_null: true, comment: "Unique identifier of the transformation pipeline run." }
+      - { name: edp_run_id,                     type: STRING,   not_null: true, comment: "Common end-to-end EDP run correlation identifier." }
+      - { name: transform_job_id,               type: STRING,   not_null: true, comment: "Stable identifier of the transformation job." }
+      - { name: dbt_invocation_id,              type: STRING,   not_null: true, comment: "dbt invocation identifier for artifact correlation." }
+      - { name: dbt_command,                    type: STRING,   not_null: true, comment: "dbt command executed for this run." }
+      - { name: dbt_target_name,                type: STRING,   not_null: true, comment: "dbt target profile used during execution." }
+      - { name: warehouse_id,                   type: STRING,                   comment: "Databricks SQL Warehouse identifier used by the run." }
+      - { name: started_at,                     type: TIMESTAMP, not_null: true, comment: "Timestamp when execution started." }
+      - { name: completed_at,                   type: TIMESTAMP,                 comment: "Timestamp when execution completed." }
+      - { name: execution_seconds,              type: BIGINT,                    comment: "Execution duration in seconds." }
+      - { name: final_status,                   type: STRING,    not_null: true, comment: "Final execution status for the run." }
+      - { name: models_total,                   type: INT,                       comment: "Total models evaluated in the dbt run." }
+      - { name: models_success,                 type: INT,                       comment: "Count of models completed successfully." }
+      - { name: models_error,                   type: INT,                       comment: "Count of models that failed." }
+      - { name: tests_total,                    type: INT,                       comment: "Total tests evaluated in the dbt run." }
+      - { name: tests_pass,                     type: INT,                       comment: "Count of tests that passed." }
+      - { name: tests_fail,                     type: INT,                       comment: "Count of tests that failed." }
+      - { name: event_date,                     type: DATE,      not_null: true, comment: "Event date used for partitioning and retention." }
+      - { name: ingested_at,                    type: TIMESTAMP, not_null: true, comment: "Timestamp when this audit record was ingested." }
+    primary_key:
+      name: pk_tdr
+      columns: [dbt_run_id]
+
+  - name: transformation_dbt_node_result
+    comment: "Per-node dbt execution result for models, seeds, snapshots, or tests."
+    using: DELTA
+    partitioned_by: [event_date]
+    columns:
+      - { name: dbt_node_result_id,             type: STRING,            not_null: true, comment: "Unique identifier of the dbt node execution result." }
+      - { name: dbt_run_id,                     type: STRING,            not_null: true, comment: "Unique identifier of the dbt run." }
+      - { name: transformation_pipeline_run_id, type: STRING,            not_null: true, comment: "Unique identifier of the transformation pipeline run." }
+      - { name: edp_run_id,                     type: STRING,            not_null: true, comment: "Common end-to-end EDP run correlation identifier." }
+      - { name: node_unique_id,                 type: STRING,            not_null: true, comment: "dbt unique id of the executed node." }
+      - { name: node_name,                      type: STRING,            not_null: true, comment: "dbt node name executed." }
+      - { name: node_type,                      type: STRING,            not_null: true, comment: "dbt node type (model, test, seed, snapshot, etc.)." }
+      - { name: status,                         type: STRING,            not_null: true, comment: "Status reported at the event or entity level." }
+      - { name: execution_time_seconds,         type: "DECIMAL(12,3)",                   comment: "Execution time for the node in seconds." }
+      - { name: rows_affected,                  type: BIGINT,                           comment: "Rows affected by node execution when applicable." }
+      - { name: error_code,                     type: STRING,                           comment: "Normalized error code for this event." }
+      - { name: error_message,                  type: STRING,                           comment: "Sanitized error message for operations." }
+      - { name: event_date,                     type: DATE,              not_null: true, comment: "Event date used for partitioning and retention." }
+      - { name: ingested_at,                    type: TIMESTAMP,         not_null: true, comment: "Timestamp when this audit record was ingested." }
+    primary_key:
+      name: pk_tdnr
+      columns: [dbt_node_result_id]
+
+  - name: transformation_dq_validation_result
+    comment: "Append-only record of transformation data-quality rule execution results."
+    using: DELTA
+    partitioned_by: [event_date]
+    columns:
+      - { name: transform_dq_result_id,         type: STRING,            not_null: true, comment: "Unique identifier for the transformation DQ result." }
+      - { name: transformation_pipeline_run_id, type: STRING,            not_null: true, comment: "Unique identifier of the transformation pipeline run." }
+      - { name: edp_run_id,                     type: STRING,            not_null: true, comment: "Common end-to-end EDP run correlation identifier." }
+      - { name: dbt_run_id,                     type: STRING,            not_null: true, comment: "Unique identifier of the dbt run." }
+      - { name: transform_job_id,               type: STRING,            not_null: true, comment: "Stable identifier of the transformation job." }
+      - { name: rule_set_id,                    type: STRING,            not_null: true, comment: "Identifier of the data-quality rule set executed." }
+      - { name: rule_id,                        type: STRING,            not_null: true, comment: "Identifier of the executed data-quality rule." }
+      - { name: rule_name,                      type: STRING,            not_null: true, comment: "Human-readable name of the data-quality rule." }
+      - { name: rule_severity,                  type: STRING,            not_null: true, comment: "Severity level assigned to the rule." }
+      - { name: validation_status,              type: STRING,            not_null: true, comment: "Validation outcome status for the rule evaluation." }
+      - { name: quality_disposition,            type: STRING,            not_null: true, comment: "Disposition decided from quality evaluation results." }
+      - { name: evaluated_rows,                 type: BIGINT,                           comment: "Number of rows evaluated by the quality rule." }
+      - { name: failed_rows,                    type: BIGINT,                           comment: "Number of rows that failed the quality rule." }
+      - { name: failure_rate_pct,               type: "DECIMAL(9,4)",                   comment: "Failure percentage computed from evaluated and failed rows." }
+      - { name: evaluated_at,                   type: TIMESTAMP,         not_null: true, comment: "Timestamp when quality evaluation finished." }
+      - { name: event_date,                     type: DATE,              not_null: true, comment: "Event date used for partitioning and retention." }
+      - { name: ingested_at,                    type: TIMESTAMP,         not_null: true, comment: "Timestamp when this audit record was ingested." }
+    primary_key:
+      name: pk_tdqvr
+      columns: [transform_dq_result_id]
+
+  - name: transformation_data_product_publication_event
+    comment: "Publication and certification evidence for transformation outputs."
+    using: DELTA
+    partitioned_by: [event_date]
+    columns:
+      - { name: publication_event_id,           type: STRING,    not_null: true, comment: "Unique identifier of the data-product publication event." }
+      - { name: transformation_pipeline_run_id, type: STRING,    not_null: true, comment: "Unique identifier of the transformation pipeline run." }
+      - { name: edp_run_id,                     type: STRING,    not_null: true, comment: "Common end-to-end EDP run correlation identifier." }
+      - { name: transform_job_id,               type: STRING,    not_null: true, comment: "Stable identifier of the transformation job." }
+      - { name: data_product_name,              type: STRING,    not_null: true, comment: "Published data-product name." }
+      - { name: target_catalog,                 type: STRING,    not_null: true, comment: "Destination catalog for the published object." }
+      - { name: target_schema,                  type: STRING,    not_null: true, comment: "Destination schema for the published object." }
+      - { name: target_object,                  type: STRING,    not_null: true, comment: "Destination table or view object name." }
+      - { name: publication_action,             type: STRING,    not_null: true, comment: "Publication action performed (publish, update, rollback, etc.)." }
+      - { name: certification_status,           type: STRING,    not_null: true, comment: "Certification status assigned during publication." }
+      - { name: freshness_ts,                   type: TIMESTAMP,                 comment: "Data freshness timestamp evaluated for publication." }
+      - { name: row_count,                      type: BIGINT,                    comment: "Published row count when available." }
+      - { name: quality_score_pct,              type: "DECIMAL(5,2)",            comment: "Quality score percentage at publication time." }
+      - { name: published_by,                   type: STRING,    not_null: true, comment: "Identity that performed the publication action." }
+      - { name: published_at,                   type: TIMESTAMP, not_null: true, comment: "Timestamp when publication was completed." }
+      - { name: event_date,                     type: DATE,      not_null: true, comment: "Event date used for partitioning and retention." }
+      - { name: ingested_at,                    type: TIMESTAMP, not_null: true, comment: "Timestamp when this audit record was ingested." }
+    primary_key:
+      name: pk_tdppe
+      columns: [publication_event_id]

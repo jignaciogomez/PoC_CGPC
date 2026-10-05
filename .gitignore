@@ -1,4 +1,5 @@
 build/
+.databricks/
 ci/adf/node_modules/
 __pycache__/
 *.pyc

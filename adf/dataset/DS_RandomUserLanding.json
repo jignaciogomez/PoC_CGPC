@@ -1,6 +1,11 @@
 {
   "name": "DS_RandomUserLanding",
   "properties": {
+    "parameters": {
+      "file_name": {
+        "type": "String"
+      }
+    },
     "linkedServiceName": {
       "referenceName": "LS_AdlsGen2",
       "type": "LinkedServiceReference"
@@ -10,7 +15,10 @@
     "typeProperties": {
       "location": {
         "type": "AzureBlobFSLocation",
-        "fileName": "users.json",
+        "fileName": {
+          "value": "@dataset().file_name",
+          "type": "Expression"
+        },
         "folderPath": "landing",
         "fileSystem": "sales"
       }

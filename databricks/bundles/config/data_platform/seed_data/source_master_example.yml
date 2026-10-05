@@ -1,0 +1,13 @@
+# This file is active when the approved example-data job runs.
+# Catalog and environment come from the selected bundle target.
+target_table: config.source_master
+merge_keys: [source_master_id]
+rows:
+  - source_master_id: sm_amazon_ads_example
+    source_system_code: amazon_ads
+    source_system_name: Amazon Advertising
+    ingestion_pattern_type: API
+    effective_start_ts: "2026-01-01T00:00:00"
+    effective_end_ts: null
+    created_at: "2026-08-04T00:00:00"
+    created_by: edp-platform

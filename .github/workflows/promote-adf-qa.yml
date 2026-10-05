@@ -1,8 +1,15 @@
-name: Deploy QA ADF
+name: Promote ADF to QA
 
 on:
   push:
     branches: [QA]
+    paths:
+      - adf/**
+      - ci/adf/**
+      - deploy/adf-*.parameters.json
+      - scripts/prepare_adf_parameters.py
+      - scripts/test_adf_source.py
+      - .github/workflows/promote-adf-qa.yml
   workflow_dispatch:
 
 permissions:
@@ -10,7 +17,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: qa-promotion
+  group: qa-adf
   cancel-in-progress: false
 
 jobs:
@@ -34,7 +41,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Validate source
-        run: python scripts/test_prepare_adf_parameters.py
+        run: python scripts/test_adf_source.py
       - name: Check QA settings
         shell: bash
         run: |
@@ -57,21 +64,21 @@ jobs:
           npm run build -- export ../../adf "$DEV_FACTORY_RESOURCE_ID" ../../build/adf
       - name: Prepare QA ARM parameters
         run: |
-          # The exported ARM template stays untouched; QA values come from deploy/qa.parameters.json.
+          # The exported ARM template stays untouched; QA values come from deploy/adf-qa.parameters.json.
           python scripts/prepare_adf_parameters.py \
             --source-root adf \
             --template build/adf/ARMTemplateForFactory.json \
-            --configuration deploy/qa.parameters.json \
+            --configuration deploy/adf-qa.parameters.json \
             --factory-name "$QA_ADF_FACTORY_NAME" \
-            --output build/adf/qa.parameters.json
+            --output build/adf/adf-qa.parameters.json
       - name: Validate and deploy QA ADF
         run: |
           az deployment group validate \
             --resource-group "$QA_ADF_RESOURCE_GROUP" \
             --template-file build/adf/ARMTemplateForFactory.json \
-            --parameters @build/adf/qa.parameters.json
+            --parameters @build/adf/adf-qa.parameters.json
           az deployment group create \
             --resource-group "$QA_ADF_RESOURCE_GROUP" \
             --mode Incremental \
             --template-file build/adf/ARMTemplateForFactory.json \
-            --parameters @build/adf/qa.parameters.json
+            --parameters @build/adf/adf-qa.parameters.json

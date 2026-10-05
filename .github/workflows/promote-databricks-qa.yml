@@ -1,0 +1,47 @@
+name: Promote Databricks to QA
+
+on:
+  push:
+    branches: [QA]
+    paths:
+      - databricks/**
+      - scripts/check_databricks_target.py
+      - .github/workflows/promote-databricks-qa.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: qa-databricks
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/QA'
+    runs-on: ubuntu-latest
+    environment: qa
+    env:
+      DATABRICKS_AUTH_TYPE: github-oidc
+      DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
+      DATABRICKS_CLIENT_ID: ${{ vars.DATABRICKS_CLIENT_ID }}
+      SOURCE_DATABRICKS_HOST: ${{ vars.SOURCE_DATABRICKS_HOST }}
+      DATABRICKS_BUNDLE_VAR_workspace_host: ${{ vars.DATABRICKS_HOST }}
+      DATABRICKS_BUNDLE_VAR_landing_volume_path: ${{ vars.DATABRICKS_LANDING_VOLUME_PATH }}
+      DATABRICKS_BUNDLE_VAR_checkpoint_path: ${{ vars.DATABRICKS_CHECKPOINT_PATH }}
+    defaults:
+      run:
+        working-directory: databricks/bundles
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check separate QA workspace and paths
+        run: python ../../scripts/check_databricks_target.py qa
+      - name: Install Databricks CLI
+        uses: databricks/setup-cli@main
+      - name: Validate and inspect deployment
+        run: |
+          databricks bundle validate --target qa
+          databricks bundle plan --target qa
+      - name: Deploy job definitions and source only
+        run: databricks bundle deploy --target qa
