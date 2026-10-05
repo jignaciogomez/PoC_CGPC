@@ -103,7 +103,7 @@ The ARM deployment uses **Incremental** mode. It creates or updates resources pr
 | ADF | `deploy/adf-qa.parameters.json` plus GitHub `qa` environment values for factory and resource group | GitHub OIDC to Azure for deployment; factory managed identity for storage access at runtime |
 | Databricks | `qa` bundle target plus GitHub `qa` environment variables for host and volume paths | GitHub OIDC to a Databricks service principal |
 
-The Azure deployment identity and the Databricks deployment identity are different. Neither workflow needs a credential embedded in source files. Give each identity only the access required for its target environment. Keep secret values in the appropriate identity platform or GitHub Environment, not in committed parameter files.
+The Azure deployment identity and the Databricks deployment identity are different. Configure the ADF GitHub credential in Microsoft Entra ID and the Databricks GitHub federation policy on a Databricks service principal in the Databricks account console. The ADF credential cannot replace the Databricks policy. Neither workflow needs a credential embedded in source files. Give each identity only the access required for its target environment. Keep secret values in the appropriate identity platform or GitHub Environment, not in committed parameter files.
 
 ## 5. File map for the QA PoC
 
@@ -133,7 +133,7 @@ For operating steps and prerequisites, see `docs/ADF_PROMOTION_GUIDE.md` and `do
 
 ## 7. Next steps
 
-1. Review and merge the current feature work through `Dev` and `QA`, using the project's branch protections and PR checks.
+1. Promote each reviewed change through `Dev` and `QA`, using the project's branch protections and PR checks.
 2. Verify the live QA storage, Databricks workspace, catalogs, volumes, permissions, and workspace-catalog bindings. Record the result separately from code deployment status.
 3. Run a controlled end-to-end QA test: ADF pipeline, landing-file check, Databricks definitions, then ingestion and row-level validation.
 4. Before adding PROD, agree on its factory, storage, Databricks workspace, catalog names, access model, and release approval rules. Add a Prod ADF parameter file and deployment workflow, a Databricks `prod` target and target checks, and a protected GitHub `prod` environment. Reuse the same source logic.

@@ -17,7 +17,7 @@ flowchart TD
     A -->|ingestion| I[Auto Loader processes QA ADF files]
 ```
 
-The same bundle can deploy to DEV with the `dev` target, using DEV workspace settings. Later UAT and Prod targets follow the protected branch promotion sequence once their workspaces, catalogs, and access are defined.
+The same bundle can deploy to DEV with the `dev` target, using DEV workspace settings. A Prod target can be added later when its workspace, catalogs, and access are defined. There is no UAT environment.
 
 ## Environment boundaries and one-time setup
 
@@ -26,7 +26,11 @@ The same bundle can deploy to DEV with the `dev` target, using DEV workspace set
 | DEV | `<dev_databricks_workspace_url>` | `dev_scratch_ca` | `dev_bronze_ca` |
 | QA | `<qa_databricks_workspace_url>` | `edp_qa` | `qa_bronze_ca` |
 
-The two workspace URLs **must differ**. The QA workspace needs a Databricks service principal for GitHub deployment and job runs. Configure GitHub OIDC federation for repository `<owner>/<repo>` and GitHub environment `qa`, grant that principal workspace access, job management rights, `USE CATALOG` and `CREATE SCHEMA` on the QA catalogs, and appropriate permissions on the target schemas/tables. Databricks OIDC is separate from the Azure OIDC identity used by the ADF workflow. Use [Databricks' GitHub OIDC setup](https://learn.microsoft.com/en-us/azure/databricks/dev-tools/auth/provider-github); do not put a personal access token in GitHub.
+The two workspace URLs **must differ**. The QA workspace needs a Databricks service principal for GitHub deployment and job runs. Grant that principal workspace access, job management rights, `USE CATALOG` and `CREATE SCHEMA` on the QA catalogs, and appropriate permissions on the target schemas/tables. Do not put a personal access token in GitHub.
+
+**Configure Databricks OIDC in the Databricks account console, not in Microsoft Entra ID.** In the [Databricks account console](https://accounts.azuredatabricks.net), open **User management → Service principals**, select the principal whose application ID matches the GitHub `qa` variable `DATABRICKS_CLIENT_ID`, then open **Credentials & secrets → Federation policies**. Create or verify a GitHub policy for the `qa` environment. Its issuer, subject, and audience must match the GitHub token requested by this workflow. This repository’s recent GitHub token included immutable numeric owner and repository IDs in its subject; compare the complete subject and audience printed in an authentication error instead of assuming the short `repo:<owner>/<repo>:environment:qa` form. Follow [Databricks' GitHub OIDC setup](https://learn.microsoft.com/en-us/azure/databricks/dev-tools/auth/provider-github) and [federation-policy instructions](https://learn.microsoft.com/en-us/azure/databricks/dev-tools/auth/oauth-federation-policy).
+
+The ADF workflow uses a separate GitHub-to-Microsoft Entra credential with audience `api://AzureADTokenExchange`. That credential does not authorize Databricks OAuth token federation. Microsoft Entra also rejects a second credential on the same app with the same issuer and subject, even if its audience differs. Keep the working ADF credential and configure the Databricks policy on the Databricks service principal.
 
 Create or verify the QA catalogs through the platform governance process. Ensure a `sales` schema and an **external volume** in `qa_bronze_ca.sales` exposing only QA ADF landing files. Provision a different **managed volume** for Auto Loader checkpoints. The QA Databricks job identity needs read access to the landing volume and write access to the checkpoint volume, bronze tables, and quarantine table. Check that the QA ADLS account supports hierarchical namespace and that storage credentials, external locations, firewall rules, and volume grants allow access. Catalogs, storage credentials, external locations, volumes, and grants are administrator-owned prerequisites; normal code promotion does not recreate them.
 
@@ -40,7 +44,7 @@ Create a protected GitHub environment named `qa`, restricted to the `QA` branch 
 | `DATABRICKS_LANDING_VOLUME_PATH` | `/Volumes/qa_bronze_ca/sales/<qa_landing_volume>` |
 | `DATABRICKS_CHECKPOINT_PATH` | `/Volumes/qa_bronze_ca/sales/<qa_checkpoint_volume>/random_users` |
 
-If an earlier setup used `DEV_DATABRICKS_HOST`, replace that GitHub variable with `SOURCE_DATABRICKS_HOST`. For QA its value is the DEV workspace host; later promotion stages use their own source workspace.
+If an earlier setup used `DEV_DATABRICKS_HOST`, replace that GitHub variable with `SOURCE_DATABRICKS_HOST`. For QA its value is the DEV workspace host; for a future Prod promotion, use the QA workspace host.
 
 The workflow supplies these values to bundle variables, checks that hosts differ, and authenticates with `DATABRICKS_AUTH_TYPE=github-oidc`. The landing and checkpoint paths must be distinct. The external landing volume should map to the QA `sales/landing` directory produced by ADF; ADF now writes a new `users_<ADF RunId>.json` file each run. Auto Loader relies on immutable input files and a stable checkpoint.
 
@@ -62,6 +66,7 @@ The workflow supplies these values to bundle variables, checks that hosts differ
 | `databricks/bundles/resources/jobs_data_platform.yml` | Three independent job resources: definitions, example data, ingestion. |
 | `databricks/bundles/config/data_platform/` | Versioned config/audit schema definitions and explicit example rows, with no catalog override. |
 | `databricks/src/schema_builder.py`, `apply_platform_tables.py` | Additive platform schema/table application; type drift fails and column deletion is disabled. |
+| `databricks/src/apply_seed_data.py`, `apply_dml.py` | Optional, approved example-data operation for the config tables. |
 | `databricks/src/apply_bronze_definitions.py`, `ingest_random_users.py` | Bronze table/view definitions and idempotent Auto Loader ingestion. |
 | `databricks/src/target_guard.py`, `yaml_utils.py`, `workspace_paths.py` | Workspace/catalog guard, duplicate-key YAML validation, and explicit bundle path resolution. |
 | `.github/workflows/promote-databricks-qa.yml` | QA deployment after merge, without a run. |
@@ -76,6 +81,6 @@ The PoC uses normalized email as an upsert key. That is not a durable person ide
 
 ## Adding Prod
 
-Reuse the same notebooks, YAML object definitions, and bundle job resources. Add a `prod` target in `databricks/bundles/databricks.yml` and its catalog pair in `databricks/src/target_guard.py`, then configure a separate Prod workspace host, OIDC service principal, volumes, checkpoint, grants, and protected GitHub `prod` environment. Set `SOURCE_DATABRICKS_HOST` to the UAT workspace host for the Prod promotion. Add environment-specific promotion and approved-apply workflow entry points for the `Prod` branch. The Prod workflow supplies bundle variables through the GitHub environment; there is **no Databricks ARM parameter file**. Keep the existing DEV and QA hosts and checkpoint paths separate from Prod. Future UAT and Prod workflows can call reusable workflows if the team wants to reduce repeated YAML.
+Reuse the same notebooks, YAML object definitions, and bundle job resources. Add a `prod` target in `databricks/bundles/databricks.yml` and its catalog pair in `databricks/src/target_guard.py`, then configure a separate Prod workspace host, OIDC service principal, volumes, checkpoint, grants, and protected GitHub `prod` environment. Set `SOURCE_DATABRICKS_HOST` to the QA workspace host for the Prod promotion. Add environment-specific promotion and approved-apply workflow entry points for the `Prod` branch. The Prod workflow supplies bundle variables through the GitHub environment; there is **no Databricks ARM parameter file**. Keep the existing DEV and QA hosts and checkpoint paths separate from Prod. Future Prod workflows can call reusable workflows if the team wants to reduce repeated YAML.
 
 References: [Databricks bundle workflow](https://learn.microsoft.com/en-us/azure/databricks/dev-tools/bundles/work-tasks), [direct engine and migration](https://learn.microsoft.com/en-us/azure/databricks/dev-tools/bundles/direct), [Auto Loader guidance](https://learn.microsoft.com/en-us/azure/databricks/ingestion/cloud-object-storage/auto-loader/best-practices), [streaming MERGE](https://learn.microsoft.com/en-us/azure/databricks/structured-streaming/delta-lake).

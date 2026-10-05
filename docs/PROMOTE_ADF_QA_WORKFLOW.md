@@ -33,7 +33,7 @@ flowchart TD
 
 ## Steps
 
-1. **Check out and test.** GitHub checks out the `QA` commit, installs Node.js and Python, runs the parameter-preparation tests, and checks that required `qa` environment settings exist. It refuses a target factory name equal to the DEV factory name.
+1. **Check out and test.** GitHub checks out the `QA` commit, installs Node.js and Python, runs `scripts/test_adf_source.py`, and checks that required `qa` environment settings exist. It refuses a target factory name equal to the DEV factory name.
 2. **Authenticate.** `azure/login@v2` uses GitHub OIDC with `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and `AZURE_SUBSCRIPTION_ID` from the `qa` environment. The Azure federated credential must trust this repository and its `qa` environment.
 3. **Export ADF.** Microsoft's utility from [`ci/adf/package.json`](../ci/adf/package.json) validates the ADF source under [`adf/`](../adf/) and produces `build/adf/ARMTemplateForFactory.json`. The [ARM parameter definition](../adf/arm-template-parameters-definition.json) makes the ADLS URL and dataset filesystem environment-specific parameters.
 4. **Prepare QA values.** [`scripts/prepare_adf_parameters.py`](../scripts/prepare_adf_parameters.py) checks the export against [`deploy/adf-qa.parameters.json`](../deploy/adf-qa.parameters.json), adds `QA_ADF_FACTORY_NAME` as `factoryName`, and writes `build/adf/adf-qa.parameters.json`. It does not alter the exported template.
