@@ -1,0 +1,14 @@
+# Re-running this upsert updates the same example row in the selected catalog.
+operation: upsert
+target_table: config.source_master
+match_keys: [source_master_id]
+rows:
+  - source_master_id: sm_amazon_ads_example
+    source_system_code: amazon_ads
+    source_system_name: Amazon Advertising Example
+    ingestion_pattern_type: API
+    effective_start_ts: "2026-01-01T00:00:00"
+    effective_end_ts: null
+    created_at: "2026-08-04T00:00:00"
+    created_by: edp-platform
+    active_flag: true

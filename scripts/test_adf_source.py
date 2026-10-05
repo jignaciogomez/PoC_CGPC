@@ -10,6 +10,14 @@ from prepare_adf_parameters import prepare_parameters, validate_portable_source
 
 
 class PrepareParametersTests(unittest.TestCase):
+    def test_landing_dataset_uses_one_file_per_run(self):
+        root = Path(__file__).resolve().parents[1]
+        dataset = json.loads((root / "adf/dataset/DS_RandomUserLanding.json").read_text())
+        pipeline = json.loads((root / "adf/pipeline/PL_LoadRandomUsers.json").read_text())
+        self.assertIn("file_name", dataset["properties"]["parameters"])
+        output = pipeline["properties"]["activities"][0]["outputs"][0]
+        self.assertIn("pipeline().RunId", output["parameters"]["file_name"]["value"])
+
     def setUp(self):
         self.template = {
             "parameters": {

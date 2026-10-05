@@ -1,0 +1,84 @@
+resources:
+  jobs:
+    apply_definitions:
+      name: "[${bundle.target}] EDP - Apply Definitions"
+      tasks:
+        - task_key: platform_tables
+          environment_key: yaml_runtime
+          notebook_task:
+            notebook_path: ../../src/apply_platform_tables.py
+            base_parameters:
+              catalog: ${var.platform_catalog}
+              bronze_catalog: ${var.bronze_catalog}
+              environment: ${var.environment}
+              expected_host: ${var.workspace_host}
+              schemas_dir: ${workspace.file_path}/config/data_platform/schemas
+        - task_key: bronze_objects
+          environment_key: yaml_runtime
+          depends_on:
+            - task_key: platform_tables
+          notebook_task:
+            notebook_path: ../../src/apply_bronze_definitions.py
+            base_parameters:
+              catalog: ${var.platform_catalog}
+              bronze_catalog: ${var.bronze_catalog}
+              environment: ${var.environment}
+              expected_host: ${var.workspace_host}
+      environments:
+        - environment_key: yaml_runtime
+          spec:
+            environment_version: '2'
+            dependencies:
+              - PyYAML==6.0.3
+      queue:
+        enabled: true
+
+    apply_example_data:
+      name: "[${bundle.target}] EDP - Apply Example Data"
+      tasks:
+        - task_key: seed
+          environment_key: yaml_runtime
+          notebook_task:
+            notebook_path: ../../src/apply_seed_data.py
+            base_parameters:
+              catalog: ${var.platform_catalog}
+              bronze_catalog: ${var.bronze_catalog}
+              environment: ${var.environment}
+              expected_host: ${var.workspace_host}
+              seed_data_dir: ${workspace.file_path}/config/data_platform/seed_data
+        - task_key: dml
+          environment_key: yaml_runtime
+          depends_on:
+            - task_key: seed
+          notebook_task:
+            notebook_path: ../../src/apply_dml.py
+            base_parameters:
+              catalog: ${var.platform_catalog}
+              bronze_catalog: ${var.bronze_catalog}
+              environment: ${var.environment}
+              expected_host: ${var.workspace_host}
+              dml_dir: ${workspace.file_path}/config/data_platform/dml
+      environments:
+        - environment_key: yaml_runtime
+          spec:
+            environment_version: '2'
+            dependencies:
+              - PyYAML==6.0.3
+      queue:
+        enabled: true
+
+    ingest_random_users:
+      name: "[${bundle.target}] EDP - Ingest Random Users"
+      tasks:
+        - task_key: ingest
+          notebook_task:
+            notebook_path: ../../src/ingest_random_users.py
+            base_parameters:
+              catalog: ${var.platform_catalog}
+              bronze_catalog: ${var.bronze_catalog}
+              environment: ${var.environment}
+              expected_host: ${var.workspace_host}
+              landing_volume_path: ${var.landing_volume_path}
+              checkpoint_path: ${var.checkpoint_path}
+      queue:
+        enabled: true

@@ -1,0 +1,241 @@
+schema: config
+
+tables:
+
+  # =========================================================================
+  # CONFIG - INGESTION TABLES
+  # =========================================================================
+
+  - name: source_master
+    comment: "Immutable deployment-level source configuration record."
+    using: DELTA
+    columns:
+      - { name: source_master_id,       type: STRING,    not_null: true, comment: "Unique source master identifier." }
+      - { name: environment,            type: STRING,    not_null: true, comment: "Development, QA, or Production." }
+      - { name: source_system_code,     type: STRING,    not_null: true, comment: "Canonical source-system name such as amazon_ads." }
+      - { name: source_system_name,     type: STRING,    not_null: true, comment: "Short description of source-system name." }
+      - { name: ingestion_pattern_type, type: STRING,    not_null: true, comment: "Ingestion pattern category used at runtime (API, CDC, or BATCH)." }
+      - { name: effective_start_ts,     type: TIMESTAMP, not_null: true, comment: "Timestamp at which the config became active." }
+      - { name: effective_end_ts,       type: TIMESTAMP,                 comment: "Timestamp at which the config stopped being active." }
+      - { name: created_at,             type: TIMESTAMP, not_null: true, comment: "Row creation timestamp." }
+      - { name: created_by,             type: STRING,    not_null: true, comment: "Identity that inserted the snapshot row." }
+      - { name: active_flag,            type: BOOLEAN,   not_null: true, default: "true", comment: "Identifies the active config for the environment." }
+    primary_key:
+      name: pk_ids
+      columns: [source_master_id]
+    check_constraints:
+      - name: chk_ids_env
+        expression: "environment IN ('dev','qa','prod')"
+
+  - name: source_entity_api
+    comment: "Deployment-generated source-entity level configuration."
+    using: DELTA
+    columns:
+      - { name: source_entity_api_id,       type: STRING,  not_null: true,  comment: "Source entity identifier." }
+      - { name: source_master_id,           type: STRING,  not_null: true,  comment: "Source master identifier." }
+      - { name: source_entity_name,         type: STRING,  not_null: true,  comment: "Canonical source-system name such as amazon_ads." }
+      - { name: source_system,              type: STRING,                   comment: "API source-system identifier." }
+      - { name: base_url,                   type: STRING,                   comment: "API base URL used for requests." }
+      - { name: relative_url,               type: STRING,                   comment: "Path appended after the base url for requests." }
+      - { name: http_method,                type: STRING,                   comment: "HTTP method used to request." }
+      - { name: authentication_type,        type: STRING,                   comment: "API-level authentication type override." }
+      - { name: key_vault_base_url,         type: STRING,                   comment: "Azure Key Vault base URL used to construct secret URIs." }
+      - { name: username_secret_name,       type: STRING,                   comment: "Key Vault secret-name reference for username when BASIC auth is used." }
+      - { name: password_secret_name,       type: STRING,                   comment: "Key Vault secret-name reference for password when BASIC auth is used." }
+      - { name: client_id_secret_name,      type: STRING,                   comment: "Key Vault secret-name reference for the client ID." }
+      - { name: client_secret_secret_name,  type: STRING,                   comment: "Key Vault secret-name reference for the client secret." }
+      - { name: client_refresh_secret_name, type: STRING,                   comment: "Key Vault secret-name reference for the client refresh secret." }
+      - { name: token_endpoint_url,         type: STRING,                   comment: "Token endpoint when access-token exchange is required." }
+      - { name: header_token_label,         type: STRING,                   comment: "HTTP header name used to pass the bearer or API token (e.g. Authorization, X-Api-Key)." }
+      - { name: token_http_method,          type: STRING,                   comment: "HTTP method used to request or refresh tokens." }
+      - { name: token_grant_type,           type: STRING,                   comment: "OAuth grant type for token acquisition." }
+      - { name: token_scope,                type: STRING,                   comment: "OAuth scope requested for token generation." }
+      - { name: profile_id,                 type: STRING,                   comment: "AWS Header Profile." }
+      - { name: active_flag,                type: BOOLEAN, not_null: true,  comment: "Identifies the active config for the environment." }
+      - { name: request_timeout,            type: STRING,  not_null: true,  comment: "Default source request timeout. Expected SS." }
+      - { name: query_template,             type: STRING,                   comment: "Default query-string template." }
+      - { name: request_body_template,      type: STRING,                   comment: "Default request payload template for write-style API calls." }
+      - { name: request_header_template,    type: STRING,                   comment: "Default request payload template for write-style API calls." }
+      - { name: pagination_mode,            type: STRING,                   comment: "Pagination strategy such as NONE, OFFSET_LIMIT, PAGE_NUMBER, NEXT_TOKEN or CURSOR." }
+      - { name: pagination_page_size,       type: INT,                      comment: "Page size used for paginated APIs when applicable." }
+      - { name: next_page_tag_name,         type: STRING,                   comment: "Next token, next page..." }
+      - { name: watermark_strategy,         type: STRING,                   comment: "none or configured incremental strategy." }
+      - { name: watermark_initial_value,    type: STRING,                   comment: "Initial incremental watermark." }
+      - { name: landing_container,          type: STRING,  not_null: true,  comment: "ADF container-relative landing folder template." }
+      - { name: landing_file_path,          type: STRING,  not_null: true,  comment: "ADF container-relative landing folder template." }
+      - { name: landing_file_name,          type: STRING,                   comment: "Landing file name (static or templated)." }
+      - { name: checkpoint_path,            type: STRING,  not_null: true,  comment: "Dedicated Auto Loader checkpoint location." }
+      - { name: schema_location,            type: STRING,  not_null: true,  comment: "Dedicated Auto Loader schema-state location." }
+      - { name: target_catalog,             type: STRING,  not_null: true,  comment: "Catalog where the target target table resides." }
+      - { name: target_schema,              type: STRING,  not_null: true,  comment: "Schema where the target target table resides." }
+      - { name: target_table,               type: STRING,  not_null: true,  comment: "Target target table name." }
+      - { name: load_type,                  type: STRING,  not_null: true,  comment: "full or incremental." }
+      - { name: file_pattern,               type: STRING,                   comment: "Input file-match pattern used by extraction or loading." }
+      - { name: max_files_per_trigger,      type: INT,                      comment: "Optional Auto Loader file-count throttle." }
+      - { name: bad_records_path,           type: STRING,                   comment: "Databricks bad-record Volume path template." }
+      - { name: run_priority,               type: INT,                      comment: "Execution priority used by the orchestrator scheduler." }
+      - { name: created_at,                 type: TIMESTAMP, not_null: true, comment: "Row creation timestamp." }
+      - { name: created_by,                 type: STRING,    not_null: true, comment: "Identity that inserted the profile snapshot row." }
+    primary_key:
+      name: pk_iscps
+      columns: [source_master_id, source_entity_api_id]
+    check_constraints:
+      - name: chk_iscps_auth_type
+        expression: "UPPER(authentication_type) IN ('BASIC','CLIENT_SECRET','CLIENT_SECRET_TOKEN','NONE')"
+      - name: chk_iscps_http_method
+        expression: "http_method IS NULL OR UPPER(http_method) IN ('GET','POST','PUT','PATCH','DELETE')"
+      - name: chk_iscps_token_http_method
+        expression: "token_http_method IS NULL OR UPPER(token_http_method) IN ('GET','POST')"
+
+  - name: cdc_entity
+    comment: "CDC-specific child configuration snapshot for ingestion entities."
+    using: DELTA
+    columns:
+      - { name: cdc_config_id,         type: STRING,  not_null: true, comment: "Unique CDC child-configuration identifier." }
+      - { name: ingestion_entity_id,   type: STRING,  not_null: true, comment: "Entity configured for CDC ingestion." }
+      - { name: master_deployment_id,  type: STRING,  not_null: true, comment: "Configuration snapshot containing this CDC child row." }
+      - { name: cdc_mode,              type: STRING,  not_null: true, comment: "CDC capture mode, for example LOG_BASED or KEY_BASED." }
+      - { name: source_database_type,  type: STRING,  not_null: true, comment: "Source database platform for CDC." }
+      - { name: connector_name,        type: STRING,                  comment: "Connector or integration name used for CDC extraction." }
+      - { name: agent_identifier,      type: STRING,                  comment: "Agent identifier when CDC requires on-prem or source-side agent deployment." }
+      - { name: start_position,        type: STRING,                  comment: "Initial CDC start position, SCN, LSN, or timestamp marker." }
+      - { name: cursor_column_name,    type: STRING,                  comment: "Column used as CDC cursor for key-based capture patterns." }
+      - { name: cursor_time_zone,      type: STRING,                  comment: "Timezone applied to time-based CDC cursors." }
+      - { name: poll_interval_seconds, type: INT,                     comment: "Polling interval in seconds for batch-like CDC reads." }
+      - { name: batch_size,            type: INT,                     comment: "Maximum record batch size per CDC pull." }
+      - { name: delete_capture_mode,   type: STRING,                  comment: "Delete handling mode such as HARD_DELETE, SOFT_DELETE, or IGNORE." }
+      - { name: is_enabled,            type: BOOLEAN, not_null: true, comment: "Whether this CDC child configuration row is active." }
+      - { name: created_at,            type: TIMESTAMP, not_null: true, comment: "Row creation timestamp." }
+      - { name: created_by,            type: STRING,    not_null: true, comment: "Identity that inserted the CDC child row." }
+    primary_key:
+      name: pk_iccs
+      columns: [master_deployment_id, ingestion_entity_id]
+    check_constraints:
+      - name: chk_icpcs_mode
+        expression: "UPPER(cdc_mode) IN ('LOG_BASED','KEY_BASED')"
+      - name: chk_icpcs_db_type
+        expression: "UPPER(source_database_type) IN ('SQLSERVER','ORACLE','SAP','OTHER')"
+      - name: chk_icpcs_delete_mode
+        expression: "delete_capture_mode IS NULL OR UPPER(delete_capture_mode) IN ('HARD_DELETE','SOFT_DELETE','IGNORE')"
+
+  - name: ingestion_batch_config_snapshot
+    comment: "Batch-specific child configuration snapshot for ingestion entities."
+    using: DELTA
+    columns:
+      - { name: batch_config_id,              type: STRING,  not_null: true, comment: "Unique batch child-configuration identifier." }
+      - { name: ingestion_entity_id,          type: STRING,  not_null: true, comment: "Entity configured for batch ingestion." }
+      - { name: config_snapshot_id,           type: STRING,  not_null: true, comment: "Configuration snapshot containing this batch child row." }
+      - { name: source_database_type,         type: STRING,  not_null: true, comment: "Source platform used by batch extraction." }
+      - { name: extraction_mode,              type: STRING,  not_null: true, comment: "Batch extraction strategy such as FULL_SNAPSHOT, INCREMENTAL_PK, or INCREMENTAL_TIME." }
+      - { name: primary_key_columns_csv,      type: STRING,                  comment: "Comma-separated primary key columns used for ordered incremental extraction." }
+      - { name: watermark_column_name,        type: STRING,                  comment: "Watermark or timestamp column used for incremental batch extraction." }
+      - { name: watermark_lookback_minutes,   type: INT,                     comment: "Lookback window in minutes applied to reduce late-arriving data gaps." }
+      - { name: chunk_size,                   type: INT,                     comment: "Chunk size used to split extraction ranges." }
+      - { name: parallel_extract_threads,     type: INT,                     comment: "Number of parallel extraction workers for batch reads." }
+      - { name: is_enabled,                   type: BOOLEAN, not_null: true, comment: "Whether this batch child configuration row is active." }
+      - { name: created_at,                   type: TIMESTAMP, not_null: true, comment: "Row creation timestamp." }
+      - { name: created_by,                   type: STRING,    not_null: true, comment: "Identity that inserted the batch child row." }
+    primary_key:
+      name: pk_ibcs
+      columns: [config_snapshot_id, ingestion_entity_id]
+    check_constraints:
+      - name: chk_ibpcs_db_type
+        expression: "UPPER(source_database_type) IN ('SQLSERVER','ORACLE','SAP','OTHER')"
+      - name: chk_ibpcs_extraction_mode
+        expression: "UPPER(extraction_mode) IN ('FULL_SNAPSHOT','INCREMENTAL_PK','INCREMENTAL_TIME')"
+
+  # =========================================================================
+  # CONFIG - TRANSFORMATION TABLES
+  # =========================================================================
+
+  - name: transformation_deployment_snapshot
+    comment: "Immutable deployment-level configuration snapshot for transformation."
+    using: DELTA
+    columns:
+      - { name: config_snapshot_id,  type: STRING,    not_null: true, comment: "Unique published transformation configuration snapshot identifier." }
+      - { name: environment,         type: STRING,    not_null: true, comment: "Development, QA, or Production." }
+      - { name: version_no,          type: BIGINT,    not_null: true, comment: "Monotonic transformation configuration version number." }
+      - { name: active_flag,         type: BOOLEAN,   not_null: true, comment: "Identifies the active transformation snapshot for the environment." }
+      - { name: effective_start_ts,  type: TIMESTAMP, not_null: true, comment: "Timestamp at which the transformation snapshot became active." }
+      - { name: effective_end_ts,    type: TIMESTAMP,                 comment: "Timestamp at which the transformation snapshot stopped being active." }
+      - { name: published_by,        type: STRING,    not_null: true, comment: "Approved identity that published the transformation snapshot." }
+      - { name: published_ts,        type: TIMESTAMP, not_null: true, comment: "Publication timestamp for this transformation snapshot." }
+      - { name: git_commit_sha,      type: STRING,    not_null: true, comment: "Immutable Git commit deployed for transformation." }
+      - { name: config_hash,         type: STRING,    not_null: true, comment: "Hash of canonicalized deployed transformation configuration." }
+      - { name: release_tag,         type: STRING,                    comment: "Optional transformation release tag." }
+      - { name: artifact_uri,        type: STRING,                    comment: "Storage location of transformation deployment artifacts." }
+      - { name: change_ticket_id,    type: STRING,                    comment: "Change-management ticket linked to transformation deployment." }
+      - { name: record_source,       type: STRING,    not_null: true, comment: "System that produced this transformation metadata row." }
+      - { name: created_at,          type: TIMESTAMP, not_null: true, comment: "Row creation timestamp." }
+      - { name: created_by,          type: STRING,    not_null: true, comment: "Identity that inserted the transformation snapshot row." }
+    primary_key:
+      name: pk_tds
+      columns: [config_snapshot_id]
+    check_constraints:
+      - name: chk_tds_env
+        expression: "environment IN ('dev','qa','prod')"
+
+  - name: transformation_dbt_execution_profile_snapshot
+    comment: "Deployment-generated dbt execution profile snapshot for transformation jobs."
+    using: DELTA
+    columns:
+      - { name: dbt_profile_id,             type: STRING, not_null: true, comment: "Stable dbt execution profile identifier." }
+      - { name: config_snapshot_id,         type: STRING, not_null: true, comment: "Transformation configuration snapshot containing this profile." }
+      - { name: dbt_account_id,             type: STRING, not_null: true, comment: "dbt account identifier used for execution." }
+      - { name: dbt_project_id,             type: STRING, not_null: true, comment: "dbt project identifier used for execution." }
+      - { name: dbt_environment_id,         type: STRING, not_null: true, comment: "dbt environment identifier used for execution." }
+      - { name: target_name,                type: STRING, not_null: true, comment: "dbt target profile name resolved at runtime." }
+      - { name: databricks_warehouse_id,    type: STRING, not_null: true, comment: "Databricks SQL Warehouse identifier used by dbt." }
+      - { name: threads,                    type: INT,    not_null: true, comment: "Configured dbt parallel thread count." }
+      - { name: timeout_seconds,            type: INT,    not_null: true, comment: "Maximum allowed execution time for dbt operations." }
+      - { name: retry_max_attempts,         type: INT,    not_null: true, comment: "Maximum transient retry attempts for execution." }
+      - { name: retry_backoff_seconds,      type: INT,    not_null: true, comment: "Backoff interval between execution retries in seconds." }
+      - { name: fail_fast_flag,             type: BOOLEAN, not_null: true, comment: "Whether execution should stop after first critical failure." }
+      - { name: generate_docs_flag,         type: BOOLEAN, not_null: true, comment: "Whether docs artifacts should be generated as part of run." }
+      - { name: artifact_base_uri,          type: STRING,                  comment: "Base location where dbt artifacts are published." }
+      - { name: notification_channel,       type: STRING,                  comment: "Operational notification channel for execution results." }
+      - { name: is_enabled,                 type: BOOLEAN, not_null: true, comment: "Whether the execution profile is active for scheduling." }
+      - { name: metadata_json,              type: STRING,                  comment: "Additional non-sensitive profile metadata serialized as JSON." }
+      - { name: created_at,                 type: TIMESTAMP, not_null: true, comment: "Row creation timestamp." }
+      - { name: created_by,                 type: STRING,    not_null: true, comment: "Identity that inserted the dbt profile snapshot row." }
+    primary_key:
+      name: pk_tdeps
+      columns: [config_snapshot_id, dbt_profile_id]
+
+  - name: transformation_job_config_snapshot
+    comment: "Deployment-generated transformation job configuration snapshot."
+    using: DELTA
+    columns:
+      - { name: transform_job_id,           type: STRING,   not_null: true, comment: "Stable transformation job identifier." }
+      - { name: config_snapshot_id,         type: STRING,   not_null: true, comment: "Transformation configuration snapshot containing the job." }
+      - { name: dbt_profile_id,             type: STRING,   not_null: true, comment: "dbt execution profile used by the job." }
+      - { name: job_name,                   type: STRING,   not_null: true, comment: "Human-readable transformation job name." }
+      - { name: selector_expression,        type: STRING,   not_null: true, comment: "dbt selector expression defining nodes to execute." }
+      - { name: invocation_command,         type: STRING,   not_null: true, comment: "dbt command line used for invocation." }
+      - { name: source_layer,               type: STRING,                   comment: "Logical source layer consumed by this job." }
+      - { name: target_layer,               type: STRING,                   comment: "Logical target layer produced by this job." }
+      - { name: target_catalog,             type: STRING,                   comment: "Catalog where transformation outputs are published." }
+      - { name: target_schema,              type: STRING,                   comment: "Schema where transformation outputs are published." }
+      - { name: publish_target_name,        type: STRING,                   comment: "Named publication target used by downstream consumers." }
+      - { name: quality_gate_mode,          type: STRING,   not_null: true, comment: "Quality gate enforcement mode for this job." }
+      - { name: minimum_test_pass_rate,     type: "DECIMAL(5,2)",           comment: "Minimum accepted test pass percentage." }
+      - { name: freshness_threshold_minutes, type: INT,                     comment: "Maximum accepted data freshness lag in minutes." }
+      - { name: dependency_group,           type: STRING,                   comment: "Dependency group for orchestration ordering." }
+      - { name: max_concurrency,            type: INT,                      comment: "Maximum concurrent executions allowed for the job." }
+      - { name: retry_max_attempts,         type: INT,      not_null: true, comment: "Maximum retry attempts for failed runs." }
+      - { name: retry_backoff_seconds,      type: INT,      not_null: true, comment: "Backoff interval between retries in seconds." }
+      - { name: timeout_seconds,            type: INT,      not_null: true, comment: "Execution timeout threshold in seconds." }
+      - { name: is_replay_allowed,          type: BOOLEAN,  not_null: true, comment: "Whether replay mode is allowed for this job." }
+      - { name: is_backfill_allowed,        type: BOOLEAN,  not_null: true, comment: "Whether historical backfill is allowed for this job." }
+      - { name: run_priority,               type: INT,                      comment: "Execution priority for scheduler arbitration." }
+      - { name: pii_flag,                   type: BOOLEAN,  not_null: true, default: "false", comment: "Whether the job output contains regulated personal data." }
+      - { name: is_enabled,                 type: BOOLEAN,  not_null: true, comment: "Whether the job is active for scheduling." }
+      - { name: metadata_json,              type: STRING,                   comment: "Additional non-sensitive job metadata serialized as JSON." }
+      - { name: created_at,                 type: TIMESTAMP, not_null: true, comment: "Row creation timestamp." }
+      - { name: created_by,                 type: STRING,    not_null: true, comment: "Identity that inserted the job snapshot row." }
+    primary_key:
+      name: pk_tjcs
+      columns: [config_snapshot_id, transform_job_id]
+    check_constraints:
+      - name: chk_tjcs_qg
+        expression: "quality_gate_mode IN ('warn','error')"

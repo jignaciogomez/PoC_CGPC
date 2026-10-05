@@ -1,0 +1,25 @@
+name: Validate ADF promotion source
+
+on:
+  pull_request:
+    branches: [Dev, QA, UAT, Prod]
+    paths:
+      - adf/**
+      - ci/adf/**
+      - deploy/adf-*.parameters.json
+      - scripts/prepare_adf_parameters.py
+      - scripts/test_adf_source.py
+      - .github/workflows/*adf*.yml
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python scripts/test_adf_source.py
