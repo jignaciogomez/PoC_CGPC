@@ -2,7 +2,7 @@ name: Validate Databricks promotion source
 
 on:
   pull_request:
-    branches: [Dev, QA, UAT, Prod]
+    branches: [Dev, QA, Prod]
     paths:
       - databricks/**
       - scripts/check_databricks_target.py
