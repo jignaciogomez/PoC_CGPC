@@ -1,56 +1,77 @@
 {
-  "name": "PL_LoadRandomUsers",
-  "properties": {
-    "description": "Copy the full Random User API JSON response to an immutable ADLS Gen2 file for this pipeline run.",
-    "activities": [
-      {
-        "name": "CopyRandomUserApiToAdls",
-        "type": "Copy",
-        "dependsOn": [],
-        "policy": {
-          "timeout": "0.01:00:00",
-          "retry": 2,
-          "retryIntervalInSeconds": 30,
-          "secureInput": false,
-          "secureOutput": false
-        },
-        "typeProperties": {
-          "source": {
-            "type": "BinarySource",
-            "storeSettings": {
-              "type": "HttpReadSettings",
-              "requestMethod": "Get",
-              "httpRequestTimeout": "00:01:40"
-            }
-          },
-          "sink": {
-            "type": "BinarySink",
-            "storeSettings": {
-              "type": "AzureBlobFSWriteSettings",
-              "copyBehavior": "PreserveHierarchy"
-            }
-          }
-        },
-        "inputs": [
-          {
-            "referenceName": "DS_RandomUserApi",
-            "type": "DatasetReference"
-          }
-        ],
-        "outputs": [
-          {
-            "referenceName": "DS_RandomUserLanding",
-            "type": "DatasetReference",
-            "parameters": {
-              "file_name": {
-                "value": "@concat('users_',pipeline().RunId,'.json')",
-                "type": "Expression"
-              }
-            }
-          }
-        ]
-      }
-    ],
-    "annotations": []
-  }
+	"name": "PL_LoadRandomUsers",
+	"properties": {
+		"description": "Copy the full Random User API JSON response to an immutable ADLS Gen2 file for this pipeline run.",
+		"activities": [
+			{
+				"name": "CopyRandomUserApiToAdls",
+				"type": "Copy",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.01:00:00",
+					"retry": 2,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "BinarySource",
+						"storeSettings": {
+							"type": "HttpReadSettings",
+							"httpRequestTimeout": "00:01:40",
+							"requestMethod": "Get"
+						},
+						"formatSettings": {
+							"type": "BinaryReadSettings"
+						}
+					},
+					"sink": {
+						"type": "BinarySink",
+						"storeSettings": {
+							"type": "AzureBlobFSWriteSettings",
+							"copyBehavior": "PreserveHierarchy"
+						}
+					},
+					"enableStaging": false
+				},
+				"inputs": [
+					{
+						"referenceName": "DS_RandomUserApi",
+						"type": "DatasetReference"
+					}
+				],
+				"outputs": [
+					{
+						"referenceName": "DS_RandomUserLanding",
+						"type": "DatasetReference",
+						"parameters": {
+							"file_name": {
+								"value": "@concat('users_',pipeline().RunId,'.json')",
+								"type": "Expression"
+							}
+						}
+					}
+				]
+			},
+			{
+				"name": "Wait1",
+				"type": "Wait",
+				"dependsOn": [
+					{
+						"activity": "CopyRandomUserApiToAdls",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"waitTimeInSeconds": 1
+				}
+			}
+		],
+		"annotations": []
+	}
 }
