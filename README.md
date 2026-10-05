@@ -1,10 +1,10 @@
 # ADF and Databricks promotion PoC
 
-For setup and promotion, see the [ADF promotion guide](docs/ADF_PROMOTION_GUIDE.md) and [Databricks promotion guide](docs/DATABRICKS_PROMOTION_GUIDE.md).
+Start with the [architecture and promotion overview](docs/DATA_PLATFORM_ARCHITECTURE_AND_PROMOTION.md). For setup and operations, see the [ADF promotion guide](docs/ADF_PROMOTION_GUIDE.md) and [Databricks promotion guide](docs/DATABRICKS_PROMOTION_GUIDE.md).
 
 Repository naming: environment workflows use `<action>-<platform>-<environment>.yml` (for example, `promote-adf-qa.yml`); PR checks use `validate-<platform>.yml`; committed ARM values use `<platform>-<environment>.parameters.json`. Databricks Python and resource files use `snake_case`. ADF artifact names and the required `databricks.yml` filename retain their platform conventions.
 
-The DEV factory `dev-cgpc-poc` is connected to this repository on collaboration branch `Dev` with ADF root `/adf`. Its publish branch is `adf_publish`. Only DEV uses ADF Git integration; downstream factories receive reviewed source through deployments as their workflows are added. The intended Git promotion path is feature branch → `Dev` → `QA` → `UAT` → `Prod`, with a protected branch and PR review at every merge. Configure those branch rules in GitHub; the current deployment workflow implements the `QA` step.
+The DEV factory `dev-cgpc-poc` is connected to this repository on collaboration branch `Dev` with ADF root `/adf`. Its publish branch is `adf_publish`. Only DEV uses ADF Git integration; downstream factories receive reviewed source through deployments as their workflows are added. The intended Git promotion path is feature branch → `Dev` → `QA` → `Prod`, with a protected branch and PR review at every merge. Configure those branch rules in GitHub; the current deployment workflow implements the `QA` step.
 
 The example pipeline `PL_LoadRandomUsers` copies the complete JSON response from `https://randomuser.me/api/?results=1000&exc=login` to a unique `sales/landing/users_<ADF RunId>.json` file for each run. Databricks later parses the `results` array. ADF pipeline, dataset, and linked service names remain the same in every factory.
 
@@ -32,7 +32,7 @@ ADF's [custom ARM parameter definition](adf/arm-template-parameters-definition.j
 | `QA_ADF_RESOURCE_GROUP` | `<resource_group>` |
 | `QA_ADF_FACTORY_NAME` | `<qa_factory_name>` |
 
-Set `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and `AZURE_SUBSCRIPTION_ID` as GitHub `qa` environment secrets. Configure Azure federated identity for this repository's `qa` environment and grant the deployment identity permission to deploy ADF child resources in the configured resource group. The QA factory must already exist. Restrict the `qa` GitHub environment and protect the `QA` branch as appropriate for the PR review process.
+Set `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and `AZURE_SUBSCRIPTION_ID` as GitHub `qa` environment secrets. Configure the GitHub federated credential in Microsoft Entra ID for the ADF deployment identity, and grant it permission to deploy ADF child resources in the configured resource group. Databricks uses a separate federation policy on its own service principal in the Databricks account console; see the Databricks guide. The QA factory must already exist. Restrict the `qa` GitHub environment and protect the `QA` branch as appropriate for the PR review process.
 
 Both factories' `LS_AdlsGen2` linked services use their respective factory managed identities. Grant each factory identity data-plane write access to its own storage destination (for example, Storage Blob Data Contributor) and verify any storage firewall and ADLS ACL settings before *running* a pipeline. Deployment itself does not run or inspect a pipeline. The existing QA storage account was previously reported as lacking hierarchical namespace; check its storage configuration when preparing an end-to-end ADLS Gen2 runtime test.
 
@@ -44,7 +44,7 @@ When reviewed ADF changes land on `QA`, [the workflow](.github/workflows/promote
 
 [scripts/prepare_adf_parameters.py](scripts/prepare_adf_parameters.py) checks that QA configuration names match the actual export and that every required parameter has a QA value. It adds `factoryName` to a temporary effective parameter file. It also rejects a source linked service with `encryptedCredential`, which ADF encrypts for one factory and cannot promote as-is. This is a validation guard, not credential stripping. The exported ARM template is passed to Azure unchanged.
 
-When adding a linked service, dataset, or pipeline in DEV, use stable logical names. Add any new environment-specific properties to the ADF parameter definition, then add the generated QA parameter names and values to `deploy/adf-qa.parameters.json`. The workflow will fail clearly if a new required parameter has no QA value. Never commit secret values to the parameter file; use an Azure Key Vault reference or protected environment secret for those properties. Add UAT and Prod workflows and configuration files when those target factories are ready, using the same export and parameter preparation approach.
+When adding a linked service, dataset, or pipeline in DEV, use stable logical names. Add any new environment-specific properties to the ADF parameter definition, then add the generated QA parameter names and values to `deploy/adf-qa.parameters.json`. The workflow will fail clearly if a new required parameter has no QA value. Never commit secret values to the parameter file; use an Azure Key Vault reference or protected environment secret for those properties. Add Prod workflows and configuration when that target factory is ready, using the same export and parameter preparation approach.
 
 ## Inspect the generated artifacts locally
 

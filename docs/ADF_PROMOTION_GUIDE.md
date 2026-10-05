@@ -2,7 +2,7 @@
 
 ## Executive summary
 
-This repository stores Azure Data Factory (ADF) definitions in Git. Developers author and test them in the DEV factory. Reviewed changes move through protected branches: feature → `Dev` → `QA` → `UAT` → `Prod`. Only DEV is connected to Git in ADF Studio. Each downstream factory receives an ARM deployment after its promotion PR is merged. The repository currently implements **DEV to QA**; UAT and Prod are future stages.
+This repository stores Azure Data Factory (ADF) definitions in Git. Developers author and test them in the DEV factory. Reviewed changes move through protected branches: feature → `Dev` → `QA` → `Prod`. Only DEV is connected to Git in ADF Studio. Each downstream factory receives an ARM deployment after its promotion PR is merged. The repository currently implements **DEV to QA**; Prod is a future stage. There is no UAT environment.
 
 The QA GitHub Actions workflow runs when ADF-related files change on `QA`. It exports the ADF definitions from the reviewed commit, supplies QA-specific values through an ARM parameter file, validates the deployment, and deploys all resources in the export to the existing QA factory. It does **not** execute ADF pipelines, inspect output files, or deploy Databricks. A successful deployment confirms that ADF resources were created or updated; runtime access to storage requires separate verification.
 
@@ -11,8 +11,7 @@ flowchart LR
     F[Feature branch] -->|PR review| D[Dev branch / DEV ADF Git]
     D -->|PR review| Q[QA branch]
     Q -->|GitHub Actions: export + parameters + ARM deploy| A[QA ADF]
-    Q -->|Later: PR review| U[UAT branch]
-    U -->|Later: PR review| P[Prod branch]
+    Q -->|Later: PR review| P[Prod branch]
 ```
 
 Keep the logical ADF names, such as `PL_LoadRandomUsers`, `DS_RandomUserLanding`, and `LS_AdlsGen2`, the same in every environment. Supply connection values separately for each environment. The pipeline copies the complete Random User API JSON response to an immutable `sales/landing/users_<ADF RunId>.json` file; it does not flatten the `results` array. See the [Databricks promotion guide](DATABRICKS_PROMOTION_GUIDE.md) for downstream processing in separate DEV and QA workspaces.
@@ -44,7 +43,7 @@ This identity is used by **GitHub Actions to deploy ADF resources**. It is separ
 3. Keep the issuer `https://token.actions.githubusercontent.com` and audience `api://AzureADTokenExchange` for Azure public cloud, unless your cloud or security configuration explicitly uses different values. Give the credential a descriptive name such as `github-qa-deploy` and save it.
 4. Ensure the GitHub workflow's job references `environment: qa` and has `id-token: write`. Both are already present in `.github/workflows/promote-adf-qa.yml`. The environment name and federated credential subject must match exactly.
 
-OIDC avoids a long-lived Azure client secret in GitHub. The three IDs stored as GitHub environment secrets identify the app, tenant, and subscription; they are not an app password.
+OIDC avoids a long-lived Azure client secret in GitHub. The three IDs stored as GitHub environment secrets identify the app, tenant, and subscription; they are not an app password. This Entra credential is for ADF deployment only. The Databricks workflow uses a separate federation policy on a Databricks service principal; do not try to add a second Entra credential with the same GitHub issuer and subject for Databricks.
 
 ## 3. Grant the two identities their separate permissions
 
@@ -67,7 +66,7 @@ The workflow's Azure login does not give the Data Factory runtime access to stor
    | `QA_ADF_FACTORY_NAME` | `<qa_factory_name>` |
 
 3. Add these **environment secrets** under `qa`: `AZURE_CLIENT_ID` = `<application_client_id>`, `AZURE_TENANT_ID` = `<tenant_id>`, and `AZURE_SUBSCRIPTION_ID` = `<subscription_id>`. The workflow uses them with `azure/login@v2`. Do not add a client secret; this workflow uses OIDC.
-4. In GitHub branch rules or rulesets, require PR reviews for `Dev`, `QA`, `UAT`, and `Prod` as those branches are used. Open and merge a PR from the feature branch into `Dev`; then open and merge a PR from `Dev` into `QA`. A `QA` merge that changes ADF source, its parameters, or its workflow starts the ADF deployment automatically. Inspect the **Actions** run and the QA factory's resources. No manual pipeline run is part of this deployment.
+4. In GitHub branch rules or rulesets, require PR reviews for `Dev` and `QA`, and for `Prod` when that branch is introduced. Open and merge a PR from the feature branch into `Dev`; then open and merge a PR from `Dev` into `QA`. A `QA` merge that changes ADF source, its parameters, or its workflow starts the ADF deployment automatically. Inspect the **Actions** run and the QA factory's resources. No manual pipeline run is part of this deployment.
 
 The workflow also supports **Run workflow** on the `QA` ref after GitHub recognizes the workflow on the repository's default branch. Use this to redeploy the reviewed `QA` state if someone accidentally changes or deletes a deployed ADF resource. A dispatch from another ref is skipped by the job's branch guard.
 
@@ -109,7 +108,7 @@ Keep the same versioned ADF pipelines, datasets, linked services, parameter-defi
 1. Confirm that QA storage has hierarchical namespace and that the configured filesystem exists. Confirm QA Data Factory managed identity access before the first runtime test.
 2. Protect the promotion branches and review the feature → `Dev` → `QA` PRs. Verify that the QA GitHub environment, OIDC credential, and deployment role are configured before merging to `QA`.
 3. After the workflow succeeds, inspect the QA factory's pipeline, datasets, and linked services. Test the linked service and run the pipeline separately when runtime validation is desired.
-4. Add UAT and Prod configuration files, GitHub environments, federated credentials, and workflows when those factories are ready. Keep the same ADF names and apply the same export-and-parameter pattern at each stage.
+4. Add Prod configuration, a GitHub environment, federated credentials, and workflows when the Prod factory is ready. Keep the same ADF names and apply the same export-and-parameter pattern at each stage.
 5. Before scaling further, pin the ADF utility version and commit a package lockfile for repeatable CI builds. Add a release or version tag to identify exactly which reviewed commit reached each environment. If triggers or private endpoints are introduced, review ADF's specific pre/post-deployment and resource limitations before adding them to the workflow.
 
 ## References
